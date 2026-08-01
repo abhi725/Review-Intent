@@ -61,16 +61,15 @@ class NotYetBuilt(Collector):
 
 
 def registry() -> list[Collector]:
+    from intentdesk.collectors.apify import CapterraReviewCollector, G2ReviewCollector
     from intentdesk.collectors.reddit import RedditCollector
 
     return [
         RedditCollector(),
+        G2ReviewCollector(),
+        CapterraReviewCollector(),
         NotYetBuilt("builtwith", "install", ("builtwith_api_key",),
                     "install-base detection — CSV import covers this meanwhile"),
-        NotYetBuilt("apify_g2", "review", ("apify_token",),
-                    "G2 negative reviews via Apify actor"),
-        NotYetBuilt("apify_capterra", "review", ("apify_token",),
-                    "Capterra negative reviews via Apify actor"),
         NotYetBuilt("apify_jobs", "job_post", ("apify_token",),
                     "job postings naming the competitor"),
         NotYetBuilt("vendor_news", "vendor_news", (),

@@ -79,7 +79,24 @@ async def run(competitor: str | None = None) -> dict:
     per_collector: list[dict] = []
     skipped: list[dict] = []
 
+    # Providers bill as a run proceeds, so a code-side cap cannot stop one
+    # mid-flight. What it can do is refuse to start another when the month is
+    # already spent — the account-level limit remains the real backstop.
+    prefs = await preferences.all_prefs()
+    cap = float(prefs["monthly_spend_cap_usd"])
+    spent = float(await db.fetchval(
+        "SELECT COALESCE(sum(amount_usd),0) FROM spend WHERE day >= date_trunc('month', current_date)"
+    ) or 0)
+    budget_exhausted = spent >= cap
+
     for coll in registry():
+        if budget_exhausted and coll.requires:
+            skipped.append({
+                "collector": coll.name,
+                "reason": f"monthly spend cap reached (${spent:.2f} of ${cap:.2f})",
+            })
+            continue
+
         if not coll.available():
             skipped.append({
                 "collector": coll.name,
@@ -125,10 +142,24 @@ async def run(competitor: str | None = None) -> dict:
                 if inserted:
                     new += 1
 
+        cost = float(getattr(coll, "last_cost_usd", 0) or 0)
+        if cost:
+            await db.execute(
+                """
+                INSERT INTO spend (day, provider, amount_usd)
+                VALUES (current_date, $1, $2)
+                ON CONFLICT (day, provider) DO UPDATE
+                    SET amount_usd = spend.amount_usd + EXCLUDED.amount_usd
+                """,
+                coll.name,
+                cost,
+            )
+
         collected += got
         stored += new
         per_collector.append(
-            {"collector": coll.name, "found": got, "new": new, "errors": errors}
+            {"collector": coll.name, "found": got, "new": new,
+             "cost_usd": round(cost, 4), "errors": errors}
         )
 
     rescore = await rescore_all()

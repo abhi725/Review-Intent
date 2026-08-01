@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from intentdesk import db
 from intentdesk.config import ROOT, settings
-from intentdesk.services import companies, leads, signals, stats, watchlist
+from intentdesk.services import companies, leads, scan, signals, stats, watchlist
 
 
 @asynccontextmanager
@@ -175,6 +175,19 @@ async def api_watchlist_remove(competitor: str, user: dict = Depends(require_use
     if not await watchlist.remove(competitor):
         raise HTTPException(status_code=404, detail="Not on the watchlist")
     return {"competitor": competitor, "active": False}
+
+
+# ----------------------------------------------------------------- scan
+@app.post("/api/scan")
+async def api_scan(competitor: Optional[str] = None, user: dict = Depends(require_user)):
+    """Collect, match, score, rebuild the queue. Also the n8n cron target."""
+    return await scan.run(competitor)
+
+
+@app.get("/api/scan/status")
+async def api_scan_status(user: dict = Depends(require_user)):
+    """Which collectors are wired up and which are waiting on a token."""
+    return await scan.status()
 
 
 # ------------------------------------------------------------- settings

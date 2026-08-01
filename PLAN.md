@@ -124,6 +124,11 @@ spend(id PK, day, provider, amount_usd)
 
 # Phases
 
+**Status at 2026-08-01:** Phase 1 done and live at https://intent.swandigitals.com.
+Phase 2 partially done — scoring, matching, CSV install-base import and scan
+orchestration are built and tested; every network collector is written or
+declared but blocked on credentials. Phases 3–6 not started.
+
 ## Phase 0 — Decide and probe · no code · ~half a session
 
 Nothing gets built until these are settled, because the market decision changes the watchlist, the complaint taxonomy and the pitch.

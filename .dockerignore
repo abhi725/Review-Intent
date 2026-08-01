@@ -1,0 +1,10 @@
+.git/
+.venv/
+.env
+web/node_modules/
+web/dist/
+__pycache__/
+*.pyc
+*.log
+PLAN.md
+README.md

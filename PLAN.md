@@ -124,10 +124,12 @@ spend(id PK, day, provider, amount_usd)
 
 # Phases
 
-**Status at 2026-08-01:** Phase 1 done and live at https://intent.swandigitals.com.
-Phase 2 partially done — scoring, matching, CSV install-base import and scan
-orchestration are built and tested; every network collector is written or
-declared but blocked on credentials. Phases 3–6 not started.
+**Status at 2026-08-01:** live at https://intent.swandigitals.com.
+
+- **Phase 1 — done.** Schema, service layer, REST API, dashboard, deployed behind Traefik with Google OAuth.
+- **Phase 2 — partial.** Scoring, matching, CSV install-base import and scan orchestration built and tested. Every network collector is blocked on credentials; the Reddit collector is written but has never run. Apollo enrichment and the Claude drafter are not written — deliberately, until there is a key to test them against.
+- **Phase 3 — done, except the Sheets API.** The dashboard is fully operable: run scan, watchlist add/deactivate, editable targeting saved to the database, suppression removal, collector status panel. Export is CSV rather than a Sheets API write, which needs no service account and imports into Sheets directly.
+- **Phases 4–6 — not started.** MCP server, cron, digest, alerting, send automation.
 
 ## Phase 0 — Decide and probe · no code · ~half a session
 

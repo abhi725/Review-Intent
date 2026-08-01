@@ -1,0 +1,36 @@
+name: swan-intent
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: swan-intent-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-intentdesk}
+      POSTGRES_USER: ${POSTGRES_USER:-intentdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # Bound to loopback only — nothing on this box should be reachable from outside.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - intent_pgdata:/var/lib/postgresql/data
+    # Tuned small on purpose: this VM runs ~20 other containers on 8 GB.
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c max_connections=40
+      -c work_mem=4MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-intentdesk} -d ${POSTGRES_DB:-intentdesk}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  intent_pgdata:
+    name: swan_intent_pgdata

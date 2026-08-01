@@ -264,6 +264,24 @@ tbody td.num { text-align: right; font-family: var(--font-mono); font-variant-nu
 .actions { display: flex; gap: 7px; }
 .actions .btn { flex: 1; text-align: center; }
 
+a.btn { display: inline-block; text-decoration: none; line-height: 1.5; }
+
+.inline-form { display: flex; gap: 6px; }
+.inline-form input {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 10px; min-width: 170px;
+}
+.inline-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.fact-input {
+  font: inherit; font-family: var(--font-mono); font-size: 13px;
+  width: 100%; margin-top: 3px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.fact-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+label.fact { display: block; cursor: text; }
+
 .empty { padding: 40px 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
 .error { margin: 18px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--hot-soft); color: var(--hot); font-size: 13px; }
 

@@ -39,5 +39,21 @@ export const api = {
   signals: (filters = {}) => req(`/api/signals${qs(filters)}`),
   signalHealth: () => req("/api/signals/health"),
   watchlist: () => req("/api/watchlist"),
+  addWatchlist: (competitor) =>
+    req("/api/watchlist", { method: "POST", body: JSON.stringify({ competitor }) }),
+  removeWatchlist: (competitor) =>
+    req(`/api/watchlist/${encodeURIComponent(competitor)}`, { method: "DELETE" }),
+
   suppression: () => req("/api/suppression"),
+  unsuppress: (domain) =>
+    req(`/api/suppression/${encodeURIComponent(domain)}`, { method: "DELETE" }),
+
+  settings: () => req("/api/settings"),
+  patchSettings: (body) =>
+    req("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
+
+  scan: () => req("/api/scan", { method: "POST" }),
+  scanStatus: () => req("/api/scan/status"),
+
+  exportUrl: "/api/export/leads.csv",
 };

@@ -4,14 +4,23 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from intentdesk import db
 from intentdesk.config import ROOT, settings
-from intentdesk.services import companies, leads, scan, signals, stats, watchlist
+from intentdesk.services import (
+    companies,
+    export,
+    leads,
+    preferences,
+    scan,
+    signals,
+    stats,
+    watchlist,
+)
 
 
 @asynccontextmanager
@@ -212,6 +221,46 @@ class SuppressBody(BaseModel):
 async def api_suppress(body: SuppressBody, user: dict = Depends(require_user)):
     await companies.suppress(body.domain, body.reason)
     return {"domain": body.domain.lower().strip(), "reason": body.reason}
+
+
+@app.delete("/api/suppression/{domain}")
+async def api_unsuppress(domain: str, user: dict = Depends(require_user)):
+    result = await db.execute(
+        "DELETE FROM suppression WHERE domain = $1", domain.lower().strip()
+    )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="Not on the suppression list")
+    return {"domain": domain.lower().strip(), "suppressed": False}
+
+
+# ------------------------------------------------------- runtime settings
+@app.get("/api/settings")
+async def api_get_settings(user: dict = Depends(require_user)):
+    return await preferences.all_prefs()
+
+
+@app.patch("/api/settings")
+async def api_patch_settings(body: dict, user: dict = Depends(require_user)):
+    try:
+        return await preferences.update(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ---------------------------------------------------------------- export
+@app.get("/api/export/leads.csv")
+async def api_export_csv(
+    status: Optional[str] = None,
+    heat: Optional[str] = None,
+    user: dict = Depends(require_user),
+):
+    """Download the queue. Sheets imports this directly via File → Import."""
+    body = await export.leads_csv(status=status, heat=heat)
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={"content-disposition": 'attachment; filename="intent-desk-leads.csv"'},
+    )
 
 
 # ----------------------------------------------- static dashboard bundle

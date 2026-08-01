@@ -9,8 +9,14 @@ from datetime import datetime, timezone
 
 from intentdesk import db
 from intentdesk.collectors import availability, registry
-from intentdesk.config import settings
-from intentdesk.services import companies, leads, matching, scoring, signals
+from intentdesk.services import (
+    companies,
+    leads,
+    matching,
+    preferences,
+    scoring,
+    signals,
+)
 
 
 async def rescore_all() -> dict:
@@ -32,7 +38,7 @@ async def rescore_all() -> dict:
         """
     )
 
-    band = (settings.target_agents_min, settings.target_agents_max)
+    band = await preferences.agent_band()
     now = datetime.now(timezone.utc)
     scored = created = 0
 

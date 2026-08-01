@@ -53,6 +53,9 @@ export default function App() {
   const [signals, setSignals] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [suppression, setSuppression] = useState([]);
+  const [prefs, setPrefs] = useState(null);
+  const [collectors, setCollectors] = useState(null);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useToast();
 
@@ -92,11 +95,42 @@ export default function App() {
     api.lead(selectedId).then(setDetail).catch((e) => setError(e.message));
   }, [selectedId]);
 
+  const loadWatchlist = useCallback(
+    () => api.watchlist().then(setWatchlist).catch((e) => setError(e.message)),
+    []
+  );
+  const loadSuppression = useCallback(
+    () => api.suppression().then(setSuppression).catch((e) => setError(e.message)),
+    []
+  );
+
   useEffect(() => {
     if (screen === "signals") api.signals({ limit: 60 }).then(setSignals).catch(() => {});
-    if (screen === "watchlist") api.watchlist().then(setWatchlist).catch(() => {});
-    if (screen === "settings") api.suppression().then(setSuppression).catch(() => {});
-  }, [screen]);
+    if (screen === "watchlist") loadWatchlist();
+    if (screen === "settings") {
+      loadSuppression();
+      api.settings().then(setPrefs).catch(() => {});
+      api.scanStatus().then(setCollectors).catch(() => {});
+    }
+  }, [screen, loadWatchlist, loadSuppression]);
+
+  async function runScan() {
+    setScanning(true);
+    try {
+      const r = await api.scan();
+      const ran = r.collectors_ran.reduce((n, c) => n + c.new, 0);
+      setToast(
+        r.collectors_ran.length === 0
+          ? `Rescored ${r.companies_scored} companies. No collectors are wired up yet.`
+          : `${ran} new signals, ${r.leads_created} new leads, ${r.companies_scored} rescored.`
+      );
+      await refreshQueue();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function act(status) {
     try {
@@ -190,8 +224,11 @@ export default function App() {
             <div className="sub">{subtitle}</div>
           </div>
           <div className="grow" />
-          <button className="btn" onClick={() => refreshQueue().then(() => setToast("Refreshed"))}>
-            Refresh
+          <a className="btn" href={api.exportUrl} download>
+            Export CSV
+          </a>
+          <button className="btn btn-primary" onClick={runScan} disabled={scanning}>
+            {scanning ? "Scanning…" : "Run scan"}
           </button>
         </header>
 
@@ -226,8 +263,41 @@ export default function App() {
         ) : null}
 
         {screen === "signals" ? <SignalFeed signals={signals} /> : null}
-        {screen === "watchlist" ? <Watchlist rows={watchlist} /> : null}
-        {screen === "settings" ? <Settings stats={stats} suppression={suppression} /> : null}
+        {screen === "watchlist" ? (
+          <Watchlist
+            rows={watchlist}
+            onAdd={async (name) => {
+              await api.addWatchlist(name);
+              setToast(`${name} added to the watchlist`);
+              loadWatchlist();
+            }}
+            onRemove={async (name) => {
+              await api.removeWatchlist(name);
+              setToast(`${name} deactivated`);
+              loadWatchlist();
+            }}
+          />
+        ) : null}
+        {screen === "settings" ? (
+          <Settings
+            prefs={prefs}
+            collectors={collectors}
+            suppression={suppression}
+            onSave={async (changes) => {
+              try {
+                setPrefs(await api.patchSettings(changes));
+                setToast("Settings saved — takes effect on the next scan");
+              } catch (e) {
+                setError(e.message);
+              }
+            }}
+            onUnsuppress={async (domain) => {
+              await api.unsuppress(domain);
+              setToast(`${domain} removed from suppression`);
+              loadSuppression();
+            }}
+          />
+        ) : null}
       </main>
 
       {toast ? (
@@ -499,12 +569,35 @@ function SignalFeed({ signals }) {
   );
 }
 
-function Watchlist({ rows }) {
+function Watchlist({ rows, onAdd, onRemove }) {
+  const [name, setName] = useState("");
+
   return (
     <div className="workspace wide">
       <section className="panel">
         <div className="panel-head">
           <span className="eyebrow">Competitors tracked</span>
+          <div className="grow" />
+          <form
+            className="inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const v = name.trim();
+              if (!v) return;
+              setName("");
+              onAdd(v);
+            }}
+          >
+            <input
+              aria-label="Competitor name"
+              placeholder="Add a competitor"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button className="btn" type="submit" disabled={!name.trim()}>
+              Add
+            </button>
+          </form>
         </div>
         <div className="table-wrap">
           <table>
@@ -515,6 +608,7 @@ function Watchlist({ rows }) {
                 <th className="num">Install base</th>
                 <th className="num">Negatives 180d</th>
                 <th className="num">Leads produced</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -536,6 +630,13 @@ function Watchlist({ rows }) {
                   <td className="num">{w.install_base}</td>
                   <td className="num">{w.negatives_180d}</td>
                   <td className="num">{w.leads_produced}</td>
+                  <td className="num">
+                    {w.active ? (
+                      <button className="btn btn-bad" onClick={() => onRemove(w.competitor)}>
+                        Deactivate
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -546,32 +647,96 @@ function Watchlist({ rows }) {
   );
 }
 
-function Settings({ stats, suppression }) {
+const PREF_FIELDS = [
+  ["target_country", "Country", "text"],
+  ["target_agents_min", "Agents min", "number"],
+  ["target_agents_max", "Agents max", "number"],
+  ["signal_recency_days", "Signal recency (days)", "number"],
+  ["monthly_spend_cap_usd", "Monthly cap (USD)", "number"],
+];
+
+function Settings({ prefs, collectors, suppression, onSave, onUnsuppress }) {
+  const [draft, setDraft] = useState(null);
+  const current = draft ?? prefs;
+
+  if (!current) return <div className="workspace wide"><div className="empty">Loading…</div></div>;
+
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(prefs);
+  const set = (k, v) => setDraft({ ...current, [k]: v });
+
   return (
     <div className="workspace wide">
       <section className="panel">
         <div className="panel-head">
           <span className="eyebrow">Targeting and guardrails</span>
+          <div className="grow" />
+          <button
+            className="btn btn-primary"
+            disabled={!dirty}
+            onClick={() => {
+              onSave(draft);
+              setDraft(null);
+            }}
+          >
+            {dirty ? "Save changes" : "Saved"}
+          </button>
         </div>
-        <div className="detail-body" style={{ maxWidth: 640 }}>
+        <div className="detail-body" style={{ maxWidth: 720 }}>
           <div className="facts" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
-            <div className="fact">
-              <div className="eyebrow">Geography</div>
-              <b>India</b>
+            {PREF_FIELDS.map(([key, label, type]) => (
+              <label className="fact" key={key}>
+                <div className="eyebrow">{label}</div>
+                <input
+                  className="fact-input"
+                  type={type}
+                  value={current[key]}
+                  onChange={(e) =>
+                    set(key, type === "number" ? Number(e.target.value) : e.target.value)
+                  }
+                />
+              </label>
+            ))}
+          </div>
+
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 7 }}>
+              Value proposition used by the drafter
             </div>
-            <div className="fact">
-              <div className="eyebrow">Agent count</div>
-              <b>5 – 200</b>
-            </div>
-            <div className="fact">
-              <div className="eyebrow">Signal recency</div>
-              <b>180 days</b>
-            </div>
-            <div className="fact">
-              <div className="eyebrow">Monthly cap</div>
-              <b>${stats ? stats.spend_cap_usd : "—"}</b>
+            <div className="draft">
+              <input
+                aria-label="Value proposition"
+                value={current.value_proposition}
+                onChange={(e) => set("value_proposition", e.target.value)}
+              />
             </div>
           </div>
+
+          {collectors ? (
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 7 }}>
+                Collectors — {collectors.ready} of {collectors.total} ready
+              </div>
+              <div className="feed">
+                {collectors.collectors.map((c) => (
+                  <div className="feed-item" key={c.name} style={{ gridTemplateColumns: "1fr auto" }}>
+                    <div>
+                      <div className="who">{c.name}</div>
+                      <q>
+                        {c.available
+                          ? "ready"
+                          : c.missing.length
+                          ? `waiting on ${c.missing.join(", ")}`
+                          : c.note ?? "not built yet"}
+                      </q>
+                    </div>
+                    <span className={`pill ${c.available ? "p-approved" : "p-rejected"}`}>
+                      {c.available ? "ready" : "blocked"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="contact">
             <b>Outreach is company-level by default</b>
@@ -587,12 +752,19 @@ function Settings({ stats, suppression }) {
             </div>
             <div className="feed">
               {suppression.slice(0, 25).map((s) => (
-                <div className="feed-item" key={s.domain} style={{ gridTemplateColumns: "1fr auto" }}>
+                <div
+                  className="feed-item"
+                  key={s.domain}
+                  style={{ gridTemplateColumns: "1fr auto auto" }}
+                >
                   <div>
                     <div className="who">{s.domain}</div>
                     <q>{s.reason}</q>
                   </div>
                   <time>{ageDays(s.added_at)}d</time>
+                  <button className="btn" onClick={() => onUnsuppress(s.domain)}>
+                    Remove
+                  </button>
                 </div>
               ))}
               {suppression.length === 0 ? (

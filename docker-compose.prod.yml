@@ -1,0 +1,46 @@
+# Production stack. Routed by the existing Coolify Traefik proxy, using the
+# same label conventions as the other services on this box (entrypoints
+# http/https, certresolver letsencrypt).
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+name: swan-intent-prod
+
+services:
+  api:
+    image: swan-intent-api:0.1.0
+    container_name: swan-intent-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.prod}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env.prod}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-swandigitals.com}
+      MONTHLY_SPEND_CAP_USD: ${MONTHLY_SPEND_CAP_USD:-35}
+    networks:
+      - coolify            # so Traefik can reach it
+      - intentdb           # so it can reach Postgres
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "coolify"
+      traefik.http.routers.intent-http.entrypoints: "http"
+      traefik.http.routers.intent-http.rule: "Host(`intent.swandigitals.com`)"
+      traefik.http.routers.intent-http.middlewares: "redirect-to-https"
+      traefik.http.routers.intent.entrypoints: "https"
+      traefik.http.routers.intent.rule: "Host(`intent.swandigitals.com`)"
+      traefik.http.routers.intent.tls: "true"
+      traefik.http.routers.intent.tls.certresolver: "letsencrypt"
+      traefik.http.services.intent.loadbalancer.server.port: "8100"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+networks:
+  coolify:
+    external: true
+  intentdb:
+    external: true
+    name: swan-intent_default

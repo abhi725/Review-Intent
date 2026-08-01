@@ -3,6 +3,12 @@ async function req(path, options = {}) {
     headers: { "content-type": "application/json" },
     ...options,
   });
+  if (res.status === 401) {
+    // Session expired or never existed — hand off to Google rather than
+    // leaving the operator staring at an error they cannot act on.
+    window.location.href = "/auth/login";
+    throw new Error("Redirecting to sign in");
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {

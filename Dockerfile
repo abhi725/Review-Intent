@@ -33,4 +33,7 @@ EXPOSE 8100
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/health',timeout=4).status==200 else 1)"
 
-CMD ["uvicorn", "intentdesk.api.app:app", "--host", "0.0.0.0", "--port", "8100"]
+# --proxy-headers is load-bearing: without it the OAuth callback URL is built as
+# http:// behind Traefik and Google rejects it as a redirect_uri mismatch.
+CMD ["uvicorn", "intentdesk.api.app:app", "--host", "0.0.0.0", "--port", "8100", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

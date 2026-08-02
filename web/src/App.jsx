@@ -839,6 +839,51 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress, onBulk
 
           <div>
             <div className="eyebrow" style={{ marginBottom: 7 }}>
+              Who can sign in
+            </div>
+            <div className="filters" role="group" aria-label="Access mode">
+              {[
+                ["open", "Anyone with Google"],
+                ["domain", "Our domain only"],
+                ["allowlist", "Domain + approved guests"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className="chip"
+                  aria-pressed={current.access_mode === value}
+                  onClick={() => set("access_mode", value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="draft" style={{ marginTop: 8 }}>
+              <input
+                aria-label="Allowed email domains"
+                value={current.allowed_email_domains ?? ""}
+                placeholder="swandigitals.com, partner.com"
+                onChange={(e) => set("allowed_email_domains", e.target.value)}
+              />
+            </div>
+            {current.access_mode === "open" ? (
+              <div className="alert alert-warning" style={{ marginTop: 8 }}>
+                <b>Open</b>
+                <span>
+                  Anyone with a Google account and this URL can read the lead
+                  queue, drafts and suppression list. Switch to “Our domain only”
+                  to limit it.
+                </span>
+              </div>
+            ) : (
+              <div className="role" style={{ marginTop: 6 }}>
+                Checked on every sign-in, not just at signup — tightening this
+                locks out accounts created while it was open.
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 7 }}>
               Outreach channel
             </div>
             <div className="filters" role="group" aria-label="Outreach channel">

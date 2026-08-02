@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     allowed_email_domain: str = "swandigitals.com"
+    # Seeds the runtime `access_mode` preference on a fresh database; the stored
+    # setting wins after that, so changing access does not need a redeploy.
+    access_mode: str = "open"
 
     target_country: str = "IN"
     target_agents_min: int = 5

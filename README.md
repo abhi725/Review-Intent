@@ -74,7 +74,34 @@ Session-authenticated (Google), for the dashboard:
 `POST /api/enrich` · `POST /api/drafts/generate` · `GET /api/export/leads.csv`
 
 Auth is bypassed when `APP_ENV=dev` (the app is loopback-bound). Any other value
-requires a Google session.
+requires a session.
+
+### Sign-in
+
+Branded pages at `/login` and `/signup`, server-rendered rather than part of the
+React bundle — someone who cannot sign in should never be looking at a blank
+page because a 168KB bundle failed to load.
+
+Two ways in, both landing on the same `users` row: **Google** (no password to
+store) and **email + password** (stdlib `hashlib.scrypt`, OWASP parameters, no
+new dependency on a RAM-tight box). Signing in with Google using an address that
+already has a password account links the two rather than creating a second one.
+
+**The first account created becomes the admin**, so a fresh deploy is never
+locked out of its own access settings.
+
+`access_mode` is a runtime setting, changed in Settings without a redeploy, and
+is checked on **every sign-in** rather than only at registration — so tightening
+it locks out accounts created while it was loose:
+
+| Mode | Who gets in |
+|---|---|
+| `open` *(current)* | Anyone with a Google account, and any address may register |
+| `domain` | Only `allowed_email_domains` |
+| `allowlist` | Those domains, plus addresses that already have an account |
+
+Switching to `domain` or `allowlist` with an empty domain list is refused — that
+lockout costs a `psql` session to undo.
 
 ### Bearer-authenticated
 

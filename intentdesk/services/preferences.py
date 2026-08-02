@@ -20,11 +20,21 @@ DEFAULTS: dict[str, Any] = {
     # phone numbers but no email addresses, so "phone" is the only setting that
     # produces contactable leads without a paid plan.
     "outreach_channel": "phone",
+    # Who may sign in. Runtime rather than env, so tightening access does not
+    # need a redeploy — and it is checked on every sign-in, not just at
+    # registration, so tightening it locks out accounts created while it was
+    # loose.
+    #   open      — any Google account, and any address may register
+    #   domain    — only addresses on allowed_email_domains
+    #   allowlist — those domains, plus addresses that already have an account
+    "access_mode": env.access_mode,
+    "allowed_email_domains": env.allowed_email_domain,
 }
 
 EDITABLE = set(DEFAULTS)
 
 CHANNELS = ("phone", "email", "both")
+ACCESS_MODES = ("open", "domain", "allowlist")
 
 
 async def all_prefs() -> dict:
@@ -48,6 +58,19 @@ async def update(changes: dict) -> dict:
     channel = changes.get("outreach_channel")
     if channel is not None and channel not in CHANNELS:
         raise ValueError(f"outreach_channel must be one of {CHANNELS}, got {channel!r}")
+
+    mode = changes.get("access_mode")
+    if mode is not None and mode not in ACCESS_MODES:
+        raise ValueError(f"access_mode must be one of {ACCESS_MODES}, got {mode!r}")
+
+    # A domain rule with no domains locks everyone out including the person
+    # setting it, and the only way back is a psql session.
+    if mode in ("domain", "allowlist"):
+        domains = changes.get("allowed_email_domains", (await get("allowed_email_domains")))
+        if not str(domains or "").strip():
+            raise ValueError(
+                f"access_mode {mode!r} needs at least one entry in allowed_email_domains"
+            )
 
     for key, value in changes.items():
         await db.execute(

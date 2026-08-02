@@ -1,16 +1,18 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from intentdesk import db
+from intentdesk.api import pages
 from intentdesk.config import ROOT, settings
+from intentdesk.services import users
 from intentdesk.services import (
     companies,
     export,
@@ -55,10 +57,18 @@ def require_user(request: Request) -> dict:
     environment a Google session is mandatory.
     """
     if settings.is_dev:
-        return {"email": "dev@localhost", "name": "Dev"}
+        return {"email": "dev@localhost", "name": "Dev", "is_admin": True}
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="Not signed in")
+    return user
+
+
+def require_admin(user: dict = Depends(require_user)) -> dict:
+    """Account administration. The first account created becomes the admin, so
+    a fresh deploy is never locked out of its own access settings."""
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admins only")
     return user
 
 
@@ -82,32 +92,132 @@ async def login(request: Request):
     return await _oauth().google.authorize_redirect(request, str(redirect_uri))
 
 
+# ------------------------------------------------------ sign-in / sign-up pages
+# Registered before the static mount, because routes match in order and the
+# catch-all at "/" would otherwise swallow both.
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(error: str = "", notice: str = "", email: str = ""):
+    return HTMLResponse(
+        pages.login_page(
+            await users.access_mode(), await users.allowed_domains(),
+            error=error, notice=notice, email=email,
+        )
+    )
+
+
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_page(error: str = "", notice: str = "", email: str = "", name: str = ""):
+    return HTMLResponse(
+        pages.signup_page(
+            await users.access_mode(), await users.allowed_domains(),
+            error=error, notice=notice, email=email, name=name,
+        )
+    )
+
+
 @app.get("/auth/callback", name="auth_callback")
 async def auth_callback(request: Request):
-    token = await _oauth().google.authorize_access_token(request)
+    try:
+        token = await _oauth().google.authorize_access_token(request)
+    except Exception:
+        # An expired or replayed state lands here. Sending the person back to a
+        # branded page with a readable reason beats a raw traceback.
+        return RedirectResponse(
+            "/login?error=" + quote("Sign-in with Google did not complete. Try again."),
+            status_code=303,
+        )
+
     info = token.get("userinfo") or {}
     email = (info.get("email") or "").lower()
-    allowed = settings.allowed_email_domains
-    if not any(email.endswith("@" + d) for d in allowed):
-        # Name the domains, otherwise a rejected sign-in is undiagnosable from
-        # the browser — Google succeeded and only this check refused.
-        raise HTTPException(
-            status_code=403,
-            detail=f"{email} is not permitted. Allowed: {', '.join(allowed)}",
+
+    # Google says whether it verified the address. Accepting an unverified one
+    # would let someone claim an address they do not control — which, with any
+    # domain rule in force, is exactly the check being bypassed.
+    if not info.get("email_verified", True):
+        return RedirectResponse(
+            "/login?error=" + quote("Google has not verified that address."),
+            status_code=303,
         )
-    request.session["user"] = {"email": email, "name": info.get("name", email)}
-    return RedirectResponse("/")
+
+    try:
+        user = await users.upsert_google(
+            sub=info.get("sub") or email,
+            email=email,
+            name=info.get("name") or "",
+        )
+    except users.AuthError as exc:
+        return RedirectResponse("/login?error=" + quote(str(exc)), status_code=303)
+
+    request.session["user"] = user
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/auth/password")
+async def auth_password(request: Request):
+    form = await request.form()
+    email = str(form.get("email") or "")
+    try:
+        user = await users.authenticate(email, str(form.get("password") or ""))
+    except users.AuthError as exc:
+        return RedirectResponse(
+            f"/login?error={quote(str(exc))}&email={quote(email)}", status_code=303
+        )
+    request.session["user"] = user
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/auth/register")
+async def auth_register(request: Request):
+    form = await request.form()
+    email = str(form.get("email") or "")
+    name = str(form.get("name") or "")
+    try:
+        await users.register(email, str(form.get("password") or ""), name)
+    except users.AuthError as exc:
+        return RedirectResponse(
+            f"/signup?error={quote(str(exc))}&email={quote(email)}&name={quote(name)}",
+            status_code=303,
+        )
+    # Same message whether or not the address was already registered: telling
+    # them apart turns this form into a way to test which addresses exist.
+    return RedirectResponse(
+        "/login?notice=" + quote("Account ready. Sign in below."), status_code=303
+    )
 
 
 @app.get("/auth/logout")
 async def logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/")
+    return RedirectResponse("/login", status_code=303)
 
 
 @app.get("/api/me")
 async def me(user: dict = Depends(require_user)):
     return user
+
+
+@app.get("/api/users")
+async def api_users(user: dict = Depends(require_admin)):
+    """Who has an account, how they sign in, and when they last did."""
+    return await users.list_users()
+
+
+class UserPatch(BaseModel):
+    disabled: bool
+
+
+@app.patch("/api/users/{email}")
+async def api_patch_user(
+    email: str, patch: UserPatch, admin: dict = Depends(require_admin)
+):
+    if email.strip().lower() == admin["email"].strip().lower():
+        # Otherwise the last admin can disable themselves and the only way back
+        # in is a psql session against the container.
+        raise HTTPException(status_code=422, detail="You cannot disable your own account")
+    result = await users.set_disabled(email, patch.disabled)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No such account")
+    return result
 
 
 # --------------------------------------------------------------- health

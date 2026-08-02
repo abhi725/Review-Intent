@@ -4,9 +4,10 @@ async function req(path, options = {}) {
     ...options,
   });
   if (res.status === 401) {
-    // Session expired or never existed — hand off to Google rather than
-    // leaving the operator staring at an error they cannot act on.
-    window.location.href = "/auth/login";
+    // Session expired or never existed. Go to the branded sign-in page rather
+    // than straight to Google: there is now a password option too, and the page
+    // is also where a rejected sign-in can explain itself.
+    window.location.href = "/login";
     throw new Error("Redirecting to sign in");
   }
   if (!res.ok) {

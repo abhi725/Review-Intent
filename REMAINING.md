@@ -21,7 +21,7 @@ records the decision so it reads as intent rather than an accident.
 | LLM layer — OpenAI primary, Gemini fallback, Claude written | Done, verified live |
 | **Phone-first contactability, end to end** | **Done** |
 | **Vendor news collector (Google News RSS, free)** | **Done, verified live** |
-| **Job-board collector (Indeed via Apify)** | **Written, never run** |
+| **Job-board collector (Indeed via Apify)** | **Built, tested, does not work — see Phase A** |
 | **Digest, alerting, spend reconciliation, cron endpoints** | **Done** |
 | **Bulk suppression** | **Done** |
 | Tests | 63, up from 35 |
@@ -40,31 +40,51 @@ that matters this week.
 
 | # | Needed | Unlocks | Cost |
 |---|---|---|---|
-| 1 | **Authorise one paid job-board scan (~$0.81)** | The first companies in the database | $0.81 of the $3.58 left this month |
+| 1 | **A list of Indian event organisers** (CSV: name, domain, city) | The first companies in the database — the critical path | Free if you have one |
 | 2 | **Your real value proposition** | Every draft; the current line is a placeholder and the UI now says so | — |
 | 3 | Reddit app credentials | The forum collector, already written | Free, ~2 min |
-| 4 | Paid Apify tier *(optional)* | Daily scans, Capterra via residential proxies | ~$39/mo |
+| 4 | BuiltWith or Wappalyzer key | The only remaining *automated* discovery route | Paid |
 | 5 | Paid Apollo plan *(optional)* | Email addresses. Not needed if phone-first works | Paid |
 
-Item 1 is the critical path. Items 2 and 3 are cheap and high-value.
+Item 1 is the critical path and it is now a **manual** step — see Phase A.
 **Resolved since the last revision:** the market question (event ticketing,
-confirmed) and the phone-vs-email decision (phone, built and defaulted).
+confirmed), the phone-vs-email decision (phone, built and defaulted), and the
+job-board question (tested, does not work).
 
 ---
 
-## Phase A — Get companies into the database · **blocked on ~$0.81**
+## Phase A — Get companies into the database · **blocked on a list from you**
 
-Nothing else moves until this does. Three routes, in order of value per rupee:
+Nothing else moves until this does, and the news is worse than the last
+revision: **there is no free automated route to discovering companies.**
 
-1. **Run the job-board collector.** `misceres/indeed-scraper`, $0.006 per
-   listing, 15 per competitor across 9 competitors ≈ **$0.81**. It is the only
-   free-tier source that yields a **company name and website**, which is what
-   turns a signal into a lead. G2 publishes no company, Reddit is pseudonymous,
-   and news is about the vendor. Written and unrun — the first run is the test.
-2. **Import a CSV** — `python -m scripts.import_installbase file.csv`. Costs
-   nothing and works today if you have a list of organisers from anywhere.
-3. **Apollo enrichment** then verifies the platform and returns a phone number.
-   It cannot discover companies, only enrich ones you already have.
+The job-board plan was the candidate and it was tested to destruction on
+2026-08-02 for $0.042. Both halves of the premise failed:
+
+- **Indeed does not search descriptions by vendor name.** `"Eventbrite"` returns
+  `FOUND_NO_RESULTS` in the US; `"BookMyShow"` the same in India. The one Indian
+  hit was a company *named* "Eventbrite & Exhibition" — a name collision, not a
+  customer. Indeed matches job titles, not the tech stack in the body text.
+- **`parseCompanyDetails` returns no employer website.** There is no
+  `companyInfo` key in the output at all, so even a working search would yield
+  no domain — and a domain is what makes a lead.
+
+A role-based search (`"ticketing operations"`, IN) does return real postings for
+about $0.004 each, but they name companies that merely employ support staff,
+with no platform attribution and still no domain. Two steps short of useful.
+
+The collector is left in the tree, marked `known_broken` so it can never bill
+and never returns a misleading zero. **Do not re-run vendor-name job searches.**
+
+What is left:
+
+1. **Import a CSV** — `python -m scripts.import_installbase file.csv`, columns
+   name/domain/city/vendor. Free, works today, and the only route that needs
+   nothing new. This is the ask.
+2. **BuiltWith or Wappalyzer** — the only automated install detection left, and
+   it is paid.
+3. **Apollo** then verifies the platform and returns a company phone. It enriches
+   a domain you already have; it cannot discover one.
 
 **Exit test:** `stats()` reports a non-zero install base and a non-zero
 contactable count.
@@ -88,7 +108,7 @@ Note the drafter is now **channel-aware**: on the phone channel it writes a
 
 ## Phase C — Collectors · mostly done
 
-1. ~~Job boards.~~ **Built.** Unrun — see Phase A.
+1. ~~Job boards.~~ **Built and disproved** — see Phase A. Marked `known_broken`.
 2. ~~Vendor news.~~ **Built and verified live** — Google News RSS, no key, no
    cost. Found a real Eventbrite breach-lawsuit story on the first run.
 3. **Reddit** — written, blocked on free OAuth credentials. Do not spend more
@@ -141,10 +161,14 @@ tracking, A/B draft variants.
 
 ## Suggested order
 
-**Phase A is the whole story.** Everything else is built and idle. Authorise the
-$0.81 scan, or hand over a CSV, and the rest of the machine has something to do.
-Then B (your pitch) and the n8n wiring in D, both of which are hours rather than
-sessions.
+**Phase A is the whole story.** Everything else is built and idle, waiting on
+companies that no free source will produce. Hand over a CSV of Indian event
+organisers and the rest of the machine has something to do. Then B (your pitch)
+and the n8n wiring in D, both of which are hours rather than sessions.
+
+If no such list exists, the honest options are a paid BuiltWith/Wappalyzer key
+or accepting that this tool works the list you already have rather than finding
+you a new one.
 
 ---
 

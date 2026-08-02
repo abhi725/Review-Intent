@@ -16,10 +16,31 @@ free tier (verified against the live API on 2026-08-02, 1.8M runs). Flat-rate
 LinkedIn actors were rejected for the same reason `imadjourney/capterra` was —
 a $25–39/month subscription does not fit a $5 account.
 
-UNTESTED against live output. The field names below come from the actor's
-documented output; every one is read defensively, and the first live run is the
-test. Cost is bounded by `max_per_competitor` before it is bounded by anything
-else, so a wrong guess about field names costs one cheap run, not the month.
+**Tested 2026-08-02 and it does not work.** Both halves of the premise above
+turned out to be false, for $0.042 of probing:
+
+1. **Indeed does not search job descriptions by vendor name.** `position:
+   "Eventbrite"` returns `FOUND_NO_RESULTS` in the US and one false positive in
+   India — a company literally named "Eventbrite & Exhibition", which is a name
+   collision, not a customer. `"BookMyShow"` in India: `FOUND_NO_RESULTS`.
+   Indeed matches job titles, not the tech stack buried in a description, so
+   "who posts jobs mentioning this platform" is not a question it can answer.
+2. **`parseCompanyDetails: true` returns no company website.** The output has no
+   `companyInfo` key at all — only `company` (a name), `companyIndeedUrl`,
+   `location`, and the posting itself. So even a working search would produce no
+   domain, and a domain is what makes a lead.
+
+A role-based search *does* work — `position: "ticketing operations"`, country IN,
+returned 10 real postings for $0.042 (PVR INOX, Tata Communications, KG Cinemas
+and similar). But those name companies that merely employ support staff, with no
+indication of which platform they run and still no domain, which is two steps
+short of a lead.
+
+Left in the tree rather than deleted because the parsing is sound and the
+finding is worth keeping: if a source ever appears that pairs an employer with a
+website, this is the shape of the collector that consumes it. `known_broken`
+keeps it out of every scan meanwhile, so it can never bill and never returns a
+misleading zero.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -90,6 +111,12 @@ class JobPostCollector(Collector):
     kind = "job_post"
     requires = ("apify_token",)
     actor = "misceres~indeed-scraper"
+    known_broken = (
+        "Indeed does not search job descriptions by vendor name — "
+        "'Eventbrite' and 'BookMyShow' both return FOUND_NO_RESULTS — and "
+        "parseCompanyDetails returns no employer website, so a hit would carry "
+        "no domain. Verified 2026-08-02."
+    )
 
     # 15 per competitor across 9 competitors is ~$0.81 a scan against a $5
     # month. Raising this is the single fastest way to exhaust the budget.

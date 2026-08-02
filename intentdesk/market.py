@@ -162,12 +162,15 @@ REDDIT_ACCESS_NOTE = "official API only; Apify global search yields no usable si
 
 # --------------------------------------------------------------- job postings
 #
-# The strongest discovery signal available on a free budget. A posting that
-# names the platform proves three things at once: the company runs it, someone
-# is paid to operate it, and there is budget. Unlike G2 and Reddit, a job
-# posting also carries a **company name**, which is what turns a signal into a
-# lead — Apollo can resolve a name to a domain, and no other free source gives
-# us that.
+# Tried and rejected 2026-08-02, for $0.042. The theory was that a posting
+# naming the platform proves an active install *and* budget, and that unlike G2
+# and Reddit it carries a company identity. Both halves failed against the live
+# API: Indeed matches job titles rather than description text, so a vendor-name
+# search returns FOUND_NO_RESULTS, and `parseCompanyDetails` returns no employer
+# website. See intentdesk/collectors/jobs.py for the full finding.
+#
+# Do not re-run vendor-name job searches. Kept here so the query that was tried
+# is on the record.
 JOB_QUERY_TEMPLATE = '"{competitor}"'
 
 # Roles that indicate the platform is operated, not merely mentioned in passing.

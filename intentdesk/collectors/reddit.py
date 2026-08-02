@@ -1,4 +1,4 @@
-"""Reddit complaints.
+"""Reddit complaints from event organisers.
 
 Reddit's unauthenticated JSON endpoints return 403 from datacenter IPs, so this
 uses the OAuth client-credentials flow. Creating the app is free:
@@ -16,7 +16,7 @@ import httpx
 from intentdesk.collectors import Collector, RawSignal
 from intentdesk.config import settings
 
-SUBREDDITS = ("sysadmin", "msp", "customerservice", "india_startups", "smallbusiness")
+from intentdesk.market import SUBREDDITS
 
 TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 SEARCH_URL = "https://oauth.reddit.com/r/{sub}/search"
@@ -24,9 +24,13 @@ SEARCH_URL = "https://oauth.reddit.com/r/{sub}/search"
 # Posts that merely mention the vendor are noise. These are the words that turn
 # a mention into a complaint worth surfacing.
 COMPLAINT_TERMS = (
-    "expensive", "pricing", "price", "cost", "bill", "overpriced", "renewal",
-    "alternative", "migrate", "migrating", "switch", "switching", "leaving",
-    "cancel", "frustrat", "terrible", "awful", "broken", "slow", "useless",
+    # generic dissatisfaction
+    "expensive", "pricing", "price", "fees", "overpriced", "cut", "commission",
+    "alternative", "migrate", "switch", "switching", "leaving", "cancel",
+    "frustrat", "terrible", "awful", "broken", "useless",
+    # event-ticketing specific
+    "payout", "settlement", "refund", "chargeback", "check-in", "checkin",
+    "scanner", "door", "no-show", "booking fee", "service fee",
 )
 
 

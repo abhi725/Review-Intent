@@ -119,6 +119,23 @@ G2_CANDIDATES_UNCONFIRMED = [
     "zeffy",
 ]
 
+# Subreddits worth searching. The audience rule from REVIEW_SOURCES applies
+# here too and is easy to get wrong: r/festivals and r/aves are full of ticket
+# buyers venting about queues and refunds, which reads like rich signal and is
+# the wrong person entirely. These are the organiser-side communities.
+SUBREDDITS = (
+    "eventplanning",
+    "EventProduction",
+    "Entrepreneur",
+    "smallbusiness",
+    "IndiaBusiness",
+    "StartUpIndia",
+)
+
+# Deliberately excluded — attendee communities, kept here so nobody adds them
+# back thinking they were an oversight.
+SUBREDDITS_WRONG_AUDIENCE = ("festivals", "aves", "Music", "India")
+
 # Wording the prompts use, so market language lives beside the market.
 BUYER_ROLE = "event organiser"
 PLATFORM_NOUN = "event ticketing platform"

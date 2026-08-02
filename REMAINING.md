@@ -95,18 +95,19 @@ counts in the last seven days.
 **Exit test:** nobody triggers anything by hand, and a deliberately broken
 collector raises an alert within one cycle.
 
-## Phase E — Hardening · ~1 session
+## Phase E — Hardening · mostly done
 
-Not glamorous, but two of these are live risks today.
-
-1. **Ship a migration runner in the container.** The schema was applied by hand;
-   a deploy to a fresh database currently comes up with no tables.
-2. **Widen test coverage.** Ten tests, all on scoring. Matching, the importer,
-   scan orchestration, and the API have none.
-3. Fix `scan_status` reporting Capterra as READY when it is credential-ready but
-   functionally dead — availability checks credentials, not whether the source works.
-4. Expose the MCP HTTP transport at `mcp.swandigitals.com` (written, never deployed).
-5. Bulk suppression upload; single-domain only today.
+1. ~~Migration runner in the container.~~ **Done** — runs before uvicorn;
+   verified it skips when applied and provisions all 8 tables on a fresh database.
+2. **Test coverage — partly done.** 35 tests, up from 10: scoring, name/domain
+   normalization, Gemini's schema dialect, the degraded-response validator,
+   import parsing. Scan orchestration and the API endpoints still have none.
+3. ~~`scan_status` reporting Capterra as READY while functionally dead.~~ **Done**
+   — collectors can declare `known_broken`, and availability accounts for it.
+4. ~~Expose the MCP HTTP transport.~~ **Done** — served at
+   `https://intent.swandigitals.com/mcp` with bearer auth. No subdomain: it
+   mounts into the existing app, so there was never a DNS record to add.
+5. Bulk suppression upload; single-domain only today. **Still open.**
 
 ## Phase F — Optional
 

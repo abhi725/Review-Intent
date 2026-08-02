@@ -74,8 +74,14 @@ async def auth_callback(request: Request):
     token = await _oauth().google.authorize_access_token(request)
     info = token.get("userinfo") or {}
     email = (info.get("email") or "").lower()
-    if not email.endswith("@" + settings.allowed_email_domain):
-        raise HTTPException(status_code=403, detail="Outside the allowed email domain")
+    allowed = settings.allowed_email_domains
+    if not any(email.endswith("@" + d) for d in allowed):
+        # Name the domains, otherwise a rejected sign-in is undiagnosable from
+        # the browser — Google succeeded and only this check refused.
+        raise HTTPException(
+            status_code=403,
+            detail=f"{email} is not permitted. Allowed: {', '.join(allowed)}",
+        )
     request.session["user"] = {"email": email, "name": info.get("name", email)}
     return RedirectResponse("/")
 

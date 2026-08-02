@@ -38,5 +38,15 @@ class Settings(BaseSettings):
     def is_dev(self) -> bool:
         return self.app_env == "dev"
 
+    @property
+    def allowed_email_domains(self) -> list[str]:
+        """ALLOWED_EMAIL_DOMAIN accepts a comma-separated list, so the desk can
+        be shared across more than one company domain without a code change."""
+        return [
+            d.strip().lower().lstrip("@")
+            for d in self.allowed_email_domain.split(",")
+            if d.strip()
+        ]
+
 
 settings = Settings()

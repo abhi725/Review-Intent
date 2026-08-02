@@ -100,6 +100,31 @@ async def update_draft(
 
 
 @mcp.tool()
+async def redraft(lead_id: int) -> dict:
+    """Regenerate a lead's outreach draft with the configured LLM provider.
+
+    The draft never references the review, post, or job listing that surfaced
+    the lead — it speaks to the industry problem instead.
+    """
+    await _ready()
+    from intentdesk import llm as llm_mod
+    from intentdesk.services import drafting
+
+    try:
+        return await drafting.draft_for_lead(lead_id)
+    except (ValueError, llm_mod.LLMError) as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+async def llm_status() -> dict:
+    """Which LLM providers are configured and which one is active."""
+    from intentdesk import llm as llm_mod
+
+    return llm_mod.status()
+
+
+@mcp.tool()
 async def explain_score(lead_id: int) -> dict:
     """Why a lead scored what it did — each signal's contribution after decay.
 

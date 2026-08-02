@@ -192,6 +192,36 @@ async def api_watchlist_remove(competitor: str, user: dict = Depends(require_use
     return {"competitor": competitor, "active": False}
 
 
+# ------------------------------------------------------------- drafting
+@app.get("/api/llm/status")
+async def api_llm_status(user: dict = Depends(require_user)):
+    """Which LLM providers are configured, in fallback order."""
+    from intentdesk import llm
+
+    return llm.status()
+
+
+@app.post("/api/leads/{lead_id}/draft")
+async def api_draft_lead(lead_id: int, user: dict = Depends(require_user)):
+    from intentdesk import llm
+    from intentdesk.services import drafting
+
+    try:
+        return await drafting.draft_for_lead(lead_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except llm.LLMError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/drafts/generate")
+async def api_draft_pending(limit: int = 10, user: dict = Depends(require_user)):
+    """Draft for the top contactable leads that don't have one yet."""
+    from intentdesk.services import drafting
+
+    return await drafting.draft_pending(limit)
+
+
 # ----------------------------------------------------------------- scan
 @app.post("/api/scan")
 async def api_scan(competitor: Optional[str] = None, user: dict = Depends(require_user)):

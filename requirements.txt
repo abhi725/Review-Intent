@@ -10,3 +10,5 @@ authlib==1.4.0
 # Pinned below 2.0 on purpose: mcp 2.x pulls starlette 1.x, which breaks the
 # starlette<0.42 pin FastAPI 0.115 requires.
 mcp==1.12.4
+openai>=1.60
+anthropic>=0.69

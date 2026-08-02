@@ -26,7 +26,16 @@ class Settings(BaseSettings):
     signal_recency_days: int = 180
     monthly_spend_cap_usd: float = 35.0
 
+    # --- LLM providers ---
+    llm_provider: str = "openai"
+    llm_fallback_provider: str = "gemini"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     anthropic_api_key: str = ""
+    claude_model: str = "claude-opus-5"
+
     builtwith_api_key: str = ""
     apify_token: str = ""
     apollo_api_key: str = ""

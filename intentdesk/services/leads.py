@@ -6,12 +6,37 @@ from intentdesk import db
 LIVE_STATUSES = ("NEW", "APPROVED")
 ALL_STATUSES = ("NEW", "APPROVED", "REJECTED", "SENT")
 
+# What "contactable" means depends on the channel being worked, and that answer
+# is needed by drafting, stats and export alike. Defined once here so the three
+# cannot disagree about which leads are actionable.
+#
+# Requires `leads l JOIN companies c` in scope.
+CONTACTABLE_SQL = {
+    "phone": "(l.contact_phone IS NOT NULL OR c.phone IS NOT NULL)",
+    "email": "(l.contact_email IS NOT NULL)",
+    "both": ("(l.contact_email IS NOT NULL OR l.contact_phone IS NOT NULL "
+             "OR c.phone IS NOT NULL)"),
+}
+
+
+def contactable_predicate(channel: str) -> str:
+    """SQL predicate for the configured outreach channel.
+
+    Falls back to `both` rather than raising: an unrecognised channel should
+    widen the queue, not silently empty it.
+    """
+    return CONTACTABLE_SQL.get(channel, CONTACTABLE_SQL["both"])
+
 _LIST_SQL = """
 SELECT l.id, l.score, l.heat, l.status, l.created_at,
        l.contact_name, l.contact_title, l.contact_email,
+       -- Fall back to the company switchboard: on Apollo's free plan that is
+       -- the only number there is, and a lead with no way to reach it is not
+       -- a lead. `contact_phone` still wins when someone has entered a direct line.
+       COALESCE(l.contact_phone, c.phone) AS contact_phone,
        l.draft_subject, l.draft_body,
        c.id AS company_id, c.name AS company, c.domain, c.city,
-       c.vendor, c.agents_est,
+       c.vendor, c.agents_est, c.employees_est, c.industry, c.vendor_verified,
        COALESCE((
            SELECT json_agg(json_build_object(
                       'kind', s.kind, 'source', s.source, 'observed_at', s.observed_at)
@@ -49,7 +74,9 @@ async def get_lead(lead_id: int) -> Optional[dict]:
     lead = await db.fetchrow(
         """
         SELECT l.*, c.name AS company, c.domain, c.city, c.country,
-               c.vendor, c.agents_est, c.employee_band
+               c.vendor, c.agents_est, c.employee_band,
+               c.employees_est, c.industry, c.phone AS company_phone,
+               c.linkedin_url, c.vendor_verified, c.enriched_at
         FROM leads l
         JOIN companies c ON c.id = l.company_id
         WHERE l.id = $1
@@ -58,6 +85,11 @@ async def get_lead(lead_id: int) -> Optional[dict]:
     )
     if lead is None:
         return None
+
+    # Done here rather than as a second `contact_phone` column in the SELECT:
+    # `l.*` already provides one, and two columns of the same name in one query
+    # resolve by position in a way that is easy to break and hard to notice.
+    lead["contact_phone"] = lead.get("contact_phone") or lead.get("company_phone")
 
     lead["signals"] = await db.fetch(
         """

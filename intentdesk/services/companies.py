@@ -66,6 +66,58 @@ async def suppress(domain: str, reason: str) -> None:
     )
 
 
+async def suppress_bulk(domains: list[str], reason: str = "bulk upload") -> dict:
+    """Suppress many domains at once.
+
+    Built for the list a salesperson already has — existing customers, live
+    deals, anyone who has asked not to be contacted. One domain at a time meant
+    that list never got loaded, which is the failure mode worth designing out:
+    an unenforced do-not-contact list is worse than none, because everyone
+    believes it is being honoured.
+
+    Accepts bare domains, URLs and email addresses, since a pasted list is never
+    uniform. Returns what it could not parse rather than dropping it silently.
+    """
+    from intentdesk.services.matching import normalize_domain
+
+    cleaned: list[str] = []
+    rejected: list[str] = []
+
+    for raw in domains:
+        candidate = (raw or "").strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        if "@" in candidate:
+            candidate = candidate.rsplit("@", 1)[-1]
+        candidate = normalize_domain(candidate)
+        # A value with no dot is a company name, not a domain. Suppressing it
+        # would match nothing and read as protection that is not there.
+        if "." not in candidate or " " in candidate:
+            rejected.append(raw.strip())
+            continue
+        cleaned.append(candidate)
+
+    unique = sorted(set(cleaned))
+    if unique:
+        await db.execute(
+            """
+            INSERT INTO suppression (domain, reason)
+            SELECT unnest($1::text[]), $2
+            ON CONFLICT (domain) DO UPDATE SET reason = EXCLUDED.reason
+            """,
+            unique,
+            reason,
+        )
+
+    return {
+        "submitted": len(domains),
+        "suppressed": len(unique),
+        "duplicates": len(cleaned) - len(unique),
+        "rejected": rejected[:20],
+        "rejected_count": len(rejected),
+    }
+
+
 async def count_by_vendor() -> list[dict]:
     return await db.fetch(
         """

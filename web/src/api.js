@@ -47,6 +47,18 @@ export const api = {
   suppression: () => req("/api/suppression"),
   unsuppress: (domain) =>
     req(`/api/suppression/${encodeURIComponent(domain)}`, { method: "DELETE" }),
+  suppressBulk: (text, reason = "bulk upload") =>
+    req("/api/suppression/bulk", {
+      method: "POST",
+      body: JSON.stringify({ text, reason }),
+    }),
+
+  alerts: () => req("/api/alerts"),
+  digest: (days = 7) => req(`/api/digest?days=${days}`),
+  draftLead: (id) => req(`/api/leads/${id}/draft`, { method: "POST" }),
+  draftPending: (limit = 10) =>
+    req(`/api/drafts/generate?limit=${limit}`, { method: "POST" }),
+  enrichPending: (limit = 25) => req(`/api/enrich?limit=${limit}`, { method: "POST" }),
 
   settings: () => req("/api/settings"),
   patchSettings: (body) =>

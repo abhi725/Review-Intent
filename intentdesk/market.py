@@ -23,7 +23,13 @@ COMPETITORS: list[tuple[str, list[str]]] = [
     ("MeraEvents", ["tech", "jobs", "reddit"]),
     ("Ticketmaster", ["tech", "jobs", "g2", "capterra", "reddit"]),
     ("Zoho Backstage", ["tech", "jobs", "g2", "capterra", "reddit"]),
+    ("Ticket Tailor", ["tech", "jobs", "g2", "reddit"]),
 ]
+
+# Competitors from the abandoned helpdesk market. `python -m scripts.seed
+# --prune` deletes any watchlist row not in COMPETITORS above; this list exists
+# so the deletion is a named decision rather than a silent diff.
+RETIRED_COMPETITORS = ("Zendesk", "Freshdesk", "Zoho Desk", "Kayako")
 
 # What organisers actually complain about. Used as the enum the analyser must
 # choose from, so keep it short and non-overlapping.
@@ -51,6 +57,7 @@ VENDOR_MARKERS: dict[str, tuple[str, ...]] = {
     "MeraEvents": ("meraevents", "mera events"),
     "Ticketmaster": ("ticketmaster",),
     "Zoho Backstage": ("zoho backstage",),
+    "Ticket Tailor": ("ticket tailor", "tickettailor"),
 }
 
 
@@ -153,7 +160,67 @@ SUBREDDITS_WRONG_AUDIENCE = ("festivals", "aves", "Music", "India")
 # more Apify budget here.
 REDDIT_ACCESS_NOTE = "official API only; Apify global search yields no usable signal"
 
+# --------------------------------------------------------------- job postings
+#
+# The strongest discovery signal available on a free budget. A posting that
+# names the platform proves three things at once: the company runs it, someone
+# is paid to operate it, and there is budget. Unlike G2 and Reddit, a job
+# posting also carries a **company name**, which is what turns a signal into a
+# lead — Apollo can resolve a name to a domain, and no other free source gives
+# us that.
+JOB_QUERY_TEMPLATE = '"{competitor}"'
+
+# Roles that indicate the platform is operated, not merely mentioned in passing.
+JOB_ROLE_TERMS = (
+    "event", "ticketing", "box office", "operations", "marketing",
+    "community", "venue", "festival", "conference", "registration",
+)
+
+# Where to look. Indeed's India domain covers the SME market better than
+# LinkedIn, whose postings skew enterprise.
+JOB_LOCATIONS = ("India",)
+
+
+# ---------------------------------------------------------------- vendor news
+#
+# Google News RSS needs no key and no Apify credit, which is why it replaced the
+# vendor blog feeds from the original plan — those 404'd. The query is
+# deliberately narrow: a bare vendor name returns event listings and funding
+# gossip, neither of which says anything about a customer's willingness to move.
+NEWS_RSS = (
+    "https://news.google.com/rss/search"
+    "?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
+)
+
+# What actually predicts churn. A price rise or an outage is a reason to look
+# around; a product launch is not.
+NEWS_TRIGGER_TERMS = (
+    "price", "pricing", "fee", "fees", "increase", "hike", "raises prices",
+    "outage", "down", "downtime", "breach", "data breach", "lawsuit",
+    "layoff", "layoffs", "shuts down", "shutting down", "discontinue",
+    "acquisition", "acquired", "sunset",
+)
+
+
 # Wording the prompts use, so market language lives beside the market.
 BUYER_ROLE = "event organiser"
 PLATFORM_NOUN = "event ticketing platform"
 SIZE_NOUN = "events run per year"
+
+# The default pitch. This is a **placeholder written by the tool, not by the
+# business** — it is the one input no amount of code can supply, and every draft
+# inherits it. Override it in Settings; `value_proposition_is_default()` reports
+# whether anyone has, so the dashboard can say so out loud.
+DEFAULT_VALUE_PROPOSITION = (
+    "AI voice and WhatsApp agents that answer ticket buyers on event day, so "
+    "organisers stop losing sales to unanswered calls"
+)
+
+# Pitches that were typed to get past the empty field, including this tool's own
+# defaults across both markets. Anything here still counts as "nobody has written
+# the real one yet" — a stored placeholder is not the same as a decision.
+PLACEHOLDER_VALUE_PROPOSITIONS = (
+    DEFAULT_VALUE_PROPOSITION,
+    "AI voice + WhatsApp at SME pricing",
+    "AI voice and WhatsApp on the front line, so routine tickets never reach an agent",
+)

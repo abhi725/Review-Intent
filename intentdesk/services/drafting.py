@@ -55,6 +55,32 @@ SUBJECT_SYSTEM = (
     "Return the subject line only."
 )
 
+# On the phone channel the draft is read aloud, not sent. An email written for
+# the eye — paragraphs, a subject line, a closing question in writing — is the
+# wrong artifact for someone dialling a switchboard, so the prompt changes with
+# the channel rather than the output being repurposed.
+CALL_SYSTEM = (
+    f"You write opening scripts for a cold phone call from an Indian SME "
+    f"software vendor to {market.BUYER_ROLE}s running a competitor's "
+    f"{market.PLATFORM_NOUN}.\n\n"
+    "Hard rules:\n"
+    "- Never mention, quote, or allude to any review, forum post, job listing "
+    "or other signal. Speak as though you had never seen one.\n"
+    "- This is a switchboard number, so open by asking for the person who runs "
+    "ticketing, and assume you may be talking to a receptionist.\n"
+    "- 60 words maximum, written to be spoken: short sentences, no clauses "
+    "that need a second breath.\n"
+    "- Plain language. No hype, no jargon, no reading out a URL.\n"
+    "- End with one question that is easy to answer yes or no to.\n\n"
+    "Return the spoken script only, with no stage directions and no commentary."
+)
+
+CALL_LABEL_SYSTEM = (
+    "In at most 8 words, state the reason for the call described. "
+    "Plain and factual, as a note for the caller's own screen. "
+    "Return the line only."
+)
+
 
 async def analyse(text: str) -> dict:
     """Classify a complaint. Raises llm.LLMError when no provider is usable."""
@@ -73,6 +99,7 @@ async def draft_for_lead(lead_id: int) -> dict:
         raise ValueError(f"{lead['domain']} is suppressed — refusing to draft")
 
     prefs = await preferences.all_prefs()
+    channel = str(prefs["outreach_channel"])
 
     # Only non-identifying facts reach the prompt: what they run, roughly how
     # big they are, where they are. No quotes, no signal detail.
@@ -87,21 +114,35 @@ async def draft_for_lead(lead_id: int) -> dict:
         ]
     )
 
-    body = llm.complete(DRAFT_SYSTEM, context, max_tokens=600)
-    subject = llm.complete(SUBJECT_SYSTEM, body, max_tokens=120)
+    if channel == "phone":
+        body = llm.complete(CALL_SYSTEM, context, max_tokens=400)
+        subject = llm.complete(CALL_LABEL_SYSTEM, body, max_tokens=120)
+    else:
+        body = llm.complete(DRAFT_SYSTEM, context, max_tokens=600)
+        subject = llm.complete(SUBJECT_SYSTEM, body, max_tokens=120)
+
     subject = subject.strip().strip('"').splitlines()[0][:120]
 
     return await leads.update_draft(lead_id, subject=subject, body=body)
 
 
 async def draft_pending(limit: int = 10) -> dict:
-    """Draft for contactable leads that do not have one yet, best-effort."""
+    """Draft for contactable leads that do not have one yet, best-effort.
+
+    "Contactable" follows the configured outreach channel. This used to require
+    an email address, which on Apollo's free plan is never populated — so the
+    query matched nothing and the whole drafting stage looked broken when it was
+    only mis-scoped.
+    """
+    channel = await preferences.channel()
     rows = await db.fetch(
-        """
+        f"""
         SELECT l.id FROM leads l
+        JOIN companies c ON c.id = l.company_id
         WHERE l.status = 'NEW'
-          AND l.contact_email IS NOT NULL
+          AND {leads.contactable_predicate(channel)}
           AND (l.draft_body IS NULL OR l.draft_body = '')
+          AND NOT EXISTS (SELECT 1 FROM suppression x WHERE x.domain = c.domain)
         ORDER BY l.score DESC
         LIMIT $1
         """,
@@ -119,6 +160,8 @@ async def draft_pending(limit: int = 10) -> dict:
     return {
         "candidates": len(rows),
         "drafted": drafted,
+        "channel": channel,
         "errors": errors[:10],
         "provider": llm.status()["active"],
+        "generic_pitch": await preferences.value_proposition_is_default(),
     }

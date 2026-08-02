@@ -6,7 +6,7 @@ the team can retune targeting from the dashboard without a redeploy.
 
 from typing import Any
 
-from intentdesk import db
+from intentdesk import db, market
 from intentdesk.config import settings as env
 
 DEFAULTS: dict[str, Any] = {
@@ -15,10 +15,16 @@ DEFAULTS: dict[str, Any] = {
     "target_agents_max": env.target_agents_max,
     "signal_recency_days": env.signal_recency_days,
     "monthly_spend_cap_usd": env.monthly_spend_cap_usd,
-    "value_proposition": "AI voice and WhatsApp on the front line, so routine tickets never reach an agent",
+    "value_proposition": market.DEFAULT_VALUE_PROPOSITION,
+    # Which channel the desk is working. Apollo's free plan returns company
+    # phone numbers but no email addresses, so "phone" is the only setting that
+    # produces contactable leads without a paid plan.
+    "outreach_channel": "phone",
 }
 
 EDITABLE = set(DEFAULTS)
+
+CHANNELS = ("phone", "email", "both")
 
 
 async def all_prefs() -> dict:
@@ -39,6 +45,10 @@ async def update(changes: dict) -> dict:
     if unknown:
         raise ValueError(f"unknown setting(s): {', '.join(sorted(unknown))}")
 
+    channel = changes.get("outreach_channel")
+    if channel is not None and channel not in CHANNELS:
+        raise ValueError(f"outreach_channel must be one of {CHANNELS}, got {channel!r}")
+
     for key, value in changes.items():
         await db.execute(
             """
@@ -54,3 +64,18 @@ async def update(changes: dict) -> dict:
 async def agent_band() -> tuple[int, int]:
     prefs = await all_prefs()
     return int(prefs["target_agents_min"]), int(prefs["target_agents_max"])
+
+
+async def value_proposition_is_default() -> bool:
+    """True while nobody has replaced the placeholder pitch.
+
+    Every draft inherits this string, and a generic pitch is the difference
+    between outreach worth sending and one that reads like every other vendor.
+    Surfaced in stats so the gap is visible rather than assumed to be filled.
+    Checks the whole placeholder set, not just the current default — a pitch
+    typed once to clear the field is still an unanswered question."""
+    return (await get("value_proposition")) in market.PLACEHOLDER_VALUE_PROPOSITIONS
+
+
+async def channel() -> str:
+    return str((await all_prefs())["outreach_channel"])

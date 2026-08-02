@@ -22,7 +22,11 @@ COLUMNS = [
     ("status", "Status"),
     ("contact_name", "Contact"),
     ("contact_title", "Title"),
+    ("contact_phone", "Phone"),
     ("contact_email", "Email"),
+    ("industry", "Industry"),
+    ("employees_est", "Employees"),
+    ("vendor_verified", "Vendor verified"),
     ("draft_subject", "Draft subject"),
     ("draft_body", "Draft body"),
 ]

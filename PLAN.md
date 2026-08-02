@@ -1,5 +1,12 @@
 # Sentinel — Competitive Intent Desk
 
+> **Superseded on 2026-08-02.** This document was written against a **helpdesk**
+> market (Zendesk, Freshdesk, Zoho Desk, Kayako). The confirmed market is
+> **event ticketing**. The architecture, scoring model and source analysis below
+> all still hold — only the target changed, and everything target-specific now
+> lives in `intentdesk/market.py`. For current status and what is left, read
+> [REMAINING.md](REMAINING.md).
+
 Find companies running a competitor's helpdesk, score them by how ready they are to switch, draft outreach, and work the queue from our own dashboard. Two front ends over one core: a **web dashboard** for the sales team and our **own MCP server** for Claude.
 
 **Date:** 2026-08-01 (rev 3) · **Status:** Awaiting market decision + tokens

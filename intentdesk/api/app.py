@@ -15,6 +15,7 @@ from intentdesk.services import (
     companies,
     export,
     leads,
+    monitoring,
     preferences,
     scan,
     signals,
@@ -257,15 +258,90 @@ async def api_enrich_pending(limit: int = 25, user: dict = Depends(require_user)
 
 # ----------------------------------------------------------------- scan
 @app.post("/api/scan")
-async def api_scan(competitor: Optional[str] = None, user: dict = Depends(require_user)):
+async def api_scan(
+    competitor: Optional[str] = None,
+    free_only: bool = False,
+    user: dict = Depends(require_user),
+):
     """Collect, match, score, rebuild the queue. Also the n8n cron target."""
-    return await scan.run(competitor)
+    return await scan.run(competitor, free_only=free_only)
 
 
 @app.get("/api/scan/status")
 async def api_scan_status(user: dict = Depends(require_user)):
     """Which collectors are wired up and which are waiting on a token."""
     return await scan.status()
+
+
+# --------------------------------------------------------- monitoring
+@app.get("/api/alerts")
+async def api_alerts(user: dict = Depends(require_user)):
+    """Everything currently wrong, worst first. Empty means healthy."""
+    return await monitoring.alerts()
+
+
+@app.get("/api/digest")
+async def api_digest(
+    days: int = 7, fmt: str = "json", user: dict = Depends(require_user)
+):
+    data = await monitoring.digest(days)
+    if fmt == "text":
+        return Response(content=monitoring.render_digest(data), media_type="text/plain")
+    return data
+
+
+@app.post("/api/spend/reconcile")
+async def api_reconcile(user: dict = Depends(require_user)):
+    """Compare recorded spend against Apify's own monthly figure."""
+    return await monitoring.reconcile_spend()
+
+
+# ----------------------------------------------------------------- cron
+# n8n has no Google session and cannot get one, so the scheduled entry points
+# authenticate with the same bearer token as MCP. Mounted as a sub-app for the
+# same reason the MCP app is: the token check has to run before routing, not as
+# a per-route dependency that a future endpoint could forget to declare.
+cron = FastAPI(title="Intent Desk cron", docs_url=None, redoc_url=None)
+
+
+@cron.post("/scan")
+async def cron_scan(competitor: Optional[str] = None, free_only: bool = False):
+    return await scan.run(competitor, free_only=free_only)
+
+
+@cron.post("/enrich")
+async def cron_enrich(limit: int = 25):
+    from intentdesk.services import enrichment
+
+    return await enrichment.enrich_pending(limit)
+
+
+@cron.post("/draft")
+async def cron_draft(limit: int = 10):
+    from intentdesk.services import drafting
+
+    return await drafting.draft_pending(limit)
+
+
+@cron.get("/digest")
+async def cron_digest(days: int = 7, fmt: str = "text"):
+    data = await monitoring.digest(days)
+    if fmt == "text":
+        return Response(content=monitoring.render_digest(data), media_type="text/plain")
+    return data
+
+
+@cron.get("/alerts")
+async def cron_alerts():
+    return await monitoring.alerts()
+
+
+@cron.post("/reconcile")
+async def cron_reconcile():
+    return await monitoring.reconcile_spend()
+
+
+app.mount("/cron", BearerAuthASGI(cron, settings.mcp_bearer_token, realm="intent-desk-cron"))
 
 
 # ------------------------------------------------------------- settings
@@ -290,6 +366,27 @@ class SuppressBody(BaseModel):
 async def api_suppress(body: SuppressBody, user: dict = Depends(require_user)):
     await companies.suppress(body.domain, body.reason)
     return {"domain": body.domain.lower().strip(), "reason": body.reason}
+
+
+class SuppressBulkBody(BaseModel):
+    domains: Optional[list[str]] = None
+    text: Optional[str] = None
+    reason: str = "bulk upload"
+
+
+@app.post("/api/suppression/bulk")
+async def api_suppress_bulk(
+    body: SuppressBulkBody, user: dict = Depends(require_user)
+):
+    """Load a do-not-contact list. Accepts a JSON array or pasted text —
+    newline, comma or semicolon separated, and tolerant of URLs and emails."""
+    items = list(body.domains or [])
+    if body.text:
+        items += [part for chunk in body.text.splitlines()
+                  for part in chunk.replace(";", ",").split(",")]
+    if not items:
+        raise HTTPException(status_code=422, detail="No domains supplied")
+    return await companies.suppress_bulk(items, body.reason)
 
 
 @app.delete("/api/suppression/{domain}")

@@ -316,3 +316,22 @@ label.fact { display: block; cursor: text; }
   .topbar, .workspace { padding-left: 14px; padding-right: 14px; }
   .kpis { margin-left: 14px; margin-right: 14px; }
 }
+
+/* --------------------------------------------------------------- alert bar
+   Sits between the page title and the content. Deliberately not a toast: a
+   broken collector stays broken, and a notification that disappears after two
+   seconds is the wrong shape for a condition that persists. */
+.alertbar { display: grid; gap: 6px; margin: 18px 24px 0; }
+
+.alert {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 9px 13px; border-radius: 8px; font-size: 13px;
+  border: 1px solid transparent;
+}
+.alert b { flex: 0 0 auto; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.alert span { color: inherit; opacity: .92; }
+
+.alert-critical { background: var(--hot-soft); color: var(--hot); border-color: var(--hot); }
+.alert-warning  { background: var(--warm-soft); color: var(--warm); border-color: var(--warm); }
+
+.detail-body .alert { margin: 0; }

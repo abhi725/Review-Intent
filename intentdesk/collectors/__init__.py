@@ -67,20 +67,33 @@ class NotYetBuilt(Collector):
 
 def registry() -> list[Collector]:
     from intentdesk.collectors.apify import CapterraReviewCollector, G2ReviewCollector
+    from intentdesk.collectors.jobs import JobPostCollector
+    from intentdesk.collectors.news import VendorNewsCollector
     from intentdesk.collectors.reddit import RedditCollector
 
+    # Ordered cheapest-first so that when the spend cap stops the run, what got
+    # skipped is the expensive tail rather than an arbitrary slice.
     return [
-        RedditCollector(),
-        G2ReviewCollector(),
+        VendorNewsCollector(),   # free
+        RedditCollector(),       # free, needs an OAuth app
+        JobPostCollector(),      # ~$0.006 per listing
+        G2ReviewCollector(),     # ~$0.06 per review
         CapterraReviewCollector(),
-        NotYetBuilt("builtwith", "install", ("builtwith_api_key",),
-                    "install-base detection — CSV import covers this meanwhile"),
-        NotYetBuilt("apify_jobs", "job_post", ("apify_token",),
-                    "job postings naming the competitor"),
-        NotYetBuilt("vendor_news", "vendor_news", (),
-                    "price-hike announcements — needs a working feed URL, the "
-                    "Zendesk blog feed 404s"),
     ]
+
+
+# Sources deliberately not in the registry, and why. Kept as data so the
+# dashboard can say "decided against" rather than leaving a gap that looks like
+# an oversight and gets rebuilt by the next person.
+RETIRED: list[dict] = [
+    {"name": "builtwith", "reason": "superseded — Apollo's organizations/enrich "
+                                    "returns technology_names, which detects the "
+                                    "ticketing platform without a subscription"},
+    {"name": "trustpilot", "reason": "wrong audience — reviewers are ticket buyers, "
+                                     "not the organisers who buy the platform"},
+    {"name": "linkedin_jobs", "reason": "only flat-rate actors ($25–39/month), which "
+                                        "does not fit a $5 Apify account"},
+]
 
 
 def availability() -> list[dict]:

@@ -55,7 +55,9 @@ export default function App() {
   const [suppression, setSuppression] = useState([]);
   const [prefs, setPrefs] = useState(null);
   const [collectors, setCollectors] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const [scanning, setScanning] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useToast();
 
@@ -66,6 +68,9 @@ export default function App() {
       setStats(s);
       setLeads(l);
       setError(null);
+      // Alerts must not be able to break the queue: a failure here means the
+      // health check is down, which is not a reason to hide the leads.
+      api.alerts().then(setAlerts).catch(() => setAlerts([]));
       return l;
     } catch (e) {
       setError(e.message);
@@ -162,9 +167,25 @@ export default function App() {
   }
 
   function copyDraft() {
-    const text = `Subject: ${detail.draft_subject ?? ""}\n\n${detail.draft_body ?? ""}`;
+    const phone = stats?.outreach_channel === "phone";
+    const text = phone
+      ? `${detail.contact_phone ?? "no number"} — ${detail.company}\n\n${detail.draft_body ?? ""}`
+      : `Subject: ${detail.draft_subject ?? ""}\n\n${detail.draft_body ?? ""}`;
     navigator.clipboard?.writeText(text);
-    setToast("Draft copied — send it from your own mailbox");
+    setToast(phone ? "Call script copied" : "Draft copied — send it from your own mailbox");
+  }
+
+  async function generateDraft() {
+    setDrafting(true);
+    try {
+      setDetail(await api.draftLead(detail.id));
+      setToast("Draft generated — read it before approving");
+      refreshQueue();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDrafting(false);
+    }
   }
 
   function toggleTheme() {
@@ -233,6 +254,7 @@ export default function App() {
         </header>
 
         {error ? <div className="error">Could not load: {error}</div> : null}
+        <AlertBar alerts={alerts} />
 
         {screen === "queue" ? (
           <>
@@ -240,6 +262,7 @@ export default function App() {
             <div className="workspace">
               <LeadTable
                 leads={leads}
+                stats={stats}
                 filter={filter}
                 setFilter={setFilter}
                 selectedId={selectedId}
@@ -250,9 +273,13 @@ export default function App() {
                   <LeadDetail
                     detail={detail}
                     setDetail={setDetail}
+                    channel={stats?.outreach_channel ?? "both"}
+                    genericPitch={stats?.generic_pitch}
+                    drafting={drafting}
                     onAct={act}
                     onSave={saveDraft}
                     onCopy={copyDraft}
+                    onGenerate={generateDraft}
                   />
                 ) : (
                   <div className="empty">Select a lead to see its signals and draft.</div>
@@ -296,6 +323,21 @@ export default function App() {
               setToast(`${domain} removed from suppression`);
               loadSuppression();
             }}
+            onBulkSuppress={async (text) => {
+              try {
+                const r = await api.suppressBulk(text);
+                setToast(
+                  `${r.suppressed} suppressed` +
+                    (r.duplicates ? `, ${r.duplicates} duplicate` : "") +
+                    (r.rejected_count ? `, ${r.rejected_count} unparseable` : "")
+                );
+                loadSuppression();
+                return r;
+              } catch (e) {
+                setError(e.message);
+                return null;
+              }
+            }}
           />
         ) : null}
       </main>
@@ -309,14 +351,39 @@ export default function App() {
   );
 }
 
+function AlertBar({ alerts }) {
+  // Info-level entries are "waiting on a token", which the Settings screen
+  // already lists in full. Surfacing them here would train the eye to skip the
+  // bar, and the bar exists for the day something is actually broken.
+  const shown = (alerts ?? []).filter((a) => a.severity !== "info");
+  if (!shown.length) return null;
+  return (
+    <div className="alertbar">
+      {shown.map((a, i) => (
+        <div className={`alert alert-${a.severity}`} key={i}>
+          <b>{a.severity === "critical" ? "Broken" : "Check"}</b>
+          <span>{a.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Kpis({ stats }) {
   if (!stats) return <section className="kpis" />;
+  const channel = stats.outreach_channel ?? "both";
+  const reachNote =
+    channel === "phone"
+      ? `${stats.reachable_phone_pct}% have a number`
+      : channel === "email"
+      ? `${stats.reachable_email_pct}% have an address`
+      : `${stats.reachable_phone_pct}% phone · ${stats.reachable_email_pct}% email`;
   const cards = [
     ["New today", stats.new_today, `${stats.signals_7d} signals in 7 days`, false],
     ["Hot", stats.hot, "live complaint plus install", true],
     ["Awaiting you", stats.awaiting, "drafts to review"],
-    ["Approved this week", stats.approved_7d, `${stats.suppressed} domains suppressed`],
-    ["Install base", stats.install_base, `${stats.identifiable_pct}% contactable`],
+    ["Contactable", stats.contactable, reachNote],
+    ["Install base", stats.install_base, `${stats.suppressed} domains suppressed`],
   ];
   return (
     <section className="kpis">
@@ -331,7 +398,12 @@ function Kpis({ stats }) {
   );
 }
 
-function LeadTable({ leads, filter, setFilter, selectedId, onSelect }) {
+function LeadTable({ leads, stats, filter, setFilter, selectedId, onSelect }) {
+  // An empty queue has two very different causes and the same appearance. If
+  // there is no install base at all, no amount of scanning will help — the
+  // pipeline has no input, and saying so is more useful than "no leads".
+  const noInstallBase = stats && stats.install_base === 0;
+
   return (
     <section className="panel">
       <div className="panel-head">
@@ -360,6 +432,7 @@ function LeadTable({ leads, filter, setFilter, selectedId, onSelect }) {
               <th>Company</th>
               <th>Runs</th>
               <th>Why now</th>
+              <th>Reach</th>
               <th className="num">Score</th>
               <th>Status</th>
             </tr>
@@ -400,6 +473,16 @@ function LeadTable({ leads, filter, setFilter, selectedId, onSelect }) {
                     )}
                   </div>
                 </td>
+                <td>
+                  {l.contact_phone ? (
+                    <div style={{ fontSize: 13 }}>{l.contact_phone}</div>
+                  ) : l.contact_email ? (
+                    <div style={{ fontSize: 13 }}>{l.contact_email}</div>
+                  ) : (
+                    <span className="sig">NO CONTACT</span>
+                  )}
+                  {l.vendor_verified ? <div className="co-meta">verified</div> : null}
+                </td>
                 <td className="num">
                   <span className={`score ${l.heat}`}>{l.score}</span>
                 </td>
@@ -410,14 +493,45 @@ function LeadTable({ leads, filter, setFilter, selectedId, onSelect }) {
             ))}
           </tbody>
         </table>
-        {leads.length === 0 ? <div className="empty">Nothing matches this filter.</div> : null}
+        {leads.length === 0 ? (
+          <div className="empty">
+            {noInstallBase ? (
+              <>
+                <b>No install base yet.</b>
+                <div style={{ marginTop: 6 }}>
+                  Nothing can be scored until companies exist. Load one with{" "}
+                  <code>python -m scripts.import_installbase file.csv</code>, or run a
+                  scan — the job-board collector is the only source that produces
+                  companies on its own.
+                </div>
+              </>
+            ) : (
+              "Nothing matches this filter."
+            )}
+          </div>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function LeadDetail({ detail, setDetail, onAct, onSave, onCopy }) {
+function LeadDetail({
+  detail,
+  setDetail,
+  channel,
+  genericPitch,
+  drafting,
+  onAct,
+  onSave,
+  onCopy,
+  onGenerate,
+}) {
   const d = detail;
+  const isPhone = channel === "phone";
+  const draftLabel = isPhone ? "Call script — read it before dialling" : "Draft — edit before approving";
+  const placeholder = isPhone
+    ? "No script yet — press Generate"
+    : "No draft yet — press Generate";
   return (
     <>
       <div className="panel-head">
@@ -477,36 +591,57 @@ function LeadDetail({ detail, setDetail, onAct, onSave, onCopy }) {
           </div>
         </div>
 
-        {d.contact_email ? (
+        {d.contact_phone || d.contact_email ? (
           <div className="contact">
-            <b>{d.contact_name}</b>
-            <div className="role">{d.contact_title}</div>
-            <div className="mail">{d.contact_email}</div>
+            <b>{d.contact_name ?? d.company}</b>
+            <div className="role">
+              {d.contact_title ??
+                "Company switchboard — ask for whoever runs ticketing"}
+            </div>
+            {d.contact_phone ? <div className="mail">{d.contact_phone}</div> : null}
+            {d.contact_email ? <div className="mail">{d.contact_email}</div> : null}
+            {d.vendor_verified ? (
+              <div className="role" style={{ marginTop: 4 }}>
+                Apollo confirms they run {d.vendor}.
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="contact">
-            <b>No contact yet</b>
+            <b>No way to reach them yet</b>
             <div className="role">
-              Enrichment has not found a named decision maker at this company.
+              {d.enriched_at
+                ? "Apollo has no phone number for this domain."
+                : "Not enriched yet — run enrichment to look for a company number."}
             </div>
           </div>
         )}
 
+        {genericPitch ? (
+          <div className="alert alert-warning">
+            <b>Generic pitch</b>
+            <span>
+              Drafts are using the placeholder value proposition. Replace it in
+              Settings before sending anything.
+            </span>
+          </div>
+        ) : null}
+
         <div>
           <div className="eyebrow" style={{ marginBottom: 7 }}>
-            Draft — edit before approving
+            {draftLabel}
           </div>
           <div className="draft">
             <input
-              aria-label="Subject"
+              aria-label={isPhone ? "Reason for the call" : "Subject"}
               value={d.draft_subject ?? ""}
-              placeholder="No draft yet — generated in Phase 2"
+              placeholder={placeholder}
               onChange={(e) => setDetail({ ...d, draft_subject: e.target.value })}
             />
             <textarea
-              aria-label="Body"
+              aria-label={isPhone ? "Call script" : "Body"}
               value={d.draft_body ?? ""}
-              placeholder="No draft yet — generated in Phase 2"
+              placeholder={placeholder}
               onChange={(e) => setDetail({ ...d, draft_body: e.target.value })}
             />
           </div>
@@ -518,6 +653,9 @@ function LeadDetail({ detail, setDetail, onAct, onSave, onCopy }) {
           </button>
           <button className="btn btn-bad" onClick={() => onAct("REJECTED")}>
             Reject
+          </button>
+          <button className="btn" onClick={onGenerate} disabled={drafting}>
+            {drafting ? "Generating…" : "Generate"}
           </button>
           <button className="btn" onClick={onSave}>
             Save
@@ -655,8 +793,9 @@ const PREF_FIELDS = [
   ["monthly_spend_cap_usd", "Monthly cap (USD)", "number"],
 ];
 
-function Settings({ prefs, collectors, suppression, onSave, onUnsuppress }) {
+function Settings({ prefs, collectors, suppression, onSave, onUnsuppress, onBulkSuppress }) {
   const [draft, setDraft] = useState(null);
+  const [bulk, setBulk] = useState("");
   const current = draft ?? prefs;
 
   if (!current) return <div className="workspace wide"><div className="empty">Loading…</div></div>;
@@ -700,6 +839,34 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress }) {
 
           <div>
             <div className="eyebrow" style={{ marginBottom: 7 }}>
+              Outreach channel
+            </div>
+            <div className="filters" role="group" aria-label="Outreach channel">
+              {[
+                ["phone", "Phone"],
+                ["email", "Email"],
+                ["both", "Both"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className="chip"
+                  aria-pressed={current.outreach_channel === value}
+                  onClick={() => set("outreach_channel", value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="role" style={{ marginTop: 6 }}>
+              Apollo&rsquo;s free plan returns a company phone number and never an
+              email address. On <b>Email</b> the queue will report nothing
+              contactable until a paid Apollo plan exists. The channel also
+              decides what the drafter writes — a spoken call opener or an email.
+            </div>
+          </div>
+
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 7 }}>
               Value proposition used by the drafter
             </div>
             <div className="draft">
@@ -708,6 +875,9 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress }) {
                 value={current.value_proposition}
                 onChange={(e) => set("value_proposition", e.target.value)}
               />
+            </div>
+            <div className="role" style={{ marginTop: 6 }}>
+              This is the one input the tool cannot supply. Every draft inherits it.
             </div>
           </div>
 
@@ -743,6 +913,36 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress }) {
             <div className="role" style={{ marginTop: 4 }}>
               Drafts never quote or reference the signal that surfaced the lead. Nothing
               sends without approval — Approve puts the draft on your clipboard.
+            </div>
+          </div>
+
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 7 }}>
+              Load a do-not-contact list
+            </div>
+            <div className="draft">
+              <textarea
+                aria-label="Domains to suppress"
+                placeholder={
+                  "One per line, or comma separated.\n" +
+                  "Existing customers, live deals, anyone who has asked not to be contacted.\n" +
+                  "URLs and email addresses are accepted."
+                }
+                value={bulk}
+                onChange={(e) => setBulk(e.target.value)}
+              />
+            </div>
+            <div className="actions" style={{ marginTop: 8 }}>
+              <button
+                className="btn"
+                disabled={!bulk.trim()}
+                onClick={async () => {
+                  const r = await onBulkSuppress(bulk);
+                  if (r) setBulk("");
+                }}
+              >
+                Suppress these
+              </button>
             </div>
           </div>
 

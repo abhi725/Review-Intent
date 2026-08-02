@@ -1,10 +1,15 @@
 # Intent Desk
 
-Finds companies running a competitor's helpdesk, scores them by readiness to
-switch, drafts outreach, and serves it to a dashboard and an MCP server over one
-shared service layer.
+Finds companies running a competitor's **event ticketing platform**, scores them
+by readiness to switch, drafts outreach, and serves it to a dashboard and an MCP
+server over one shared service layer.
 
-Plan and phases: [PLAN.md](PLAN.md).
+What is left to do: [REMAINING.md](REMAINING.md). Original design and rationale:
+[PLAN.md](PLAN.md) — written against a helpdesk market, superseded on 2026-08-02.
+
+Everything market-specific lives in `intentdesk/market.py`: competitors,
+complaint taxonomy, vendor markers, job and news queries, prompt wording. A
+future pivot is an edit to that one file.
 
 ## Layout
 
@@ -12,13 +17,14 @@ Plan and phases: [PLAN.md](PLAN.md).
 intentdesk/
   config.py        settings from .env
   db.py            asyncpg pool (no ORM — this box is short on RAM)
+  market.py        competitors, taxonomy, queries — the only market-specific file
   services/        ALL business logic lives here
-  collectors/      Phase 2 — installbase, jobs, reviews, reddit, vendor news
-  api/app.py       FastAPI: REST + serves the built dashboard
-  mcp/             Phase 4 — same services exposed as MCP tools
-migrations/        plain SQL, applied in order
+  collectors/      jobs (Indeed), news (Google News RSS), reddit, g2, capterra
+  api/app.py       FastAPI: REST + /mcp + /cron + serves the built dashboard
+  mcp/             the same services exposed as MCP tools
+migrations/        plain SQL, applied in order, run before uvicorn in the image
 scripts/seed.py    watchlist + optional demo rows
-web/               Phase 1 remainder — React dashboard
+web/               React dashboard
 ```
 
 The rule that keeps the two front ends honest: **API and MCP are thin adapters.
@@ -57,14 +63,35 @@ Chosen to avoid what this VM already uses: 22, 53, 80, 443, 3020, 6001, 6002,
 
 ## API
 
+Session-authenticated (Google), for the dashboard:
+
 `GET /health` · `GET /api/stats` · `GET /api/leads` · `GET /api/leads/{id}` ·
-`PATCH /api/leads/{id}` · `GET /api/signals` · `GET /api/signals/health` ·
-`GET|POST /api/watchlist` · `DELETE /api/watchlist/{competitor}` ·
-`GET|POST /api/suppression`
+`PATCH /api/leads/{id}` · `POST /api/leads/{id}/draft` · `GET /api/signals` ·
+`GET /api/signals/health` · `GET|POST /api/watchlist` ·
+`DELETE /api/watchlist/{competitor}` · `GET|POST /api/suppression` ·
+`POST /api/suppression/bulk` · `GET|PATCH /api/settings` · `POST /api/scan` ·
+`GET /api/scan/status` · `GET /api/alerts` · `GET /api/digest` ·
+`POST /api/enrich` · `POST /api/drafts/generate` · `GET /api/export/leads.csv`
 
 Auth is bypassed when `APP_ENV=dev` (the app is loopback-bound). Any other value
-requires a Google session; the OAuth redirect URI has to be registered against
-the public domain first, which happens at deploy in Phase 5.
+requires a Google session.
+
+### Bearer-authenticated
+
+Both mounted sub-apps use `MCP_BEARER_TOKEN`, because neither an MCP client nor
+n8n can obtain a Google session — there is no browser to redirect. The check is
+ASGI middleware rather than a route dependency: route dependencies declared on
+the parent never run for a mounted sub-app, so a per-route check would be one
+forgotten decorator away from an open endpoint.
+
+| Path | Purpose |
+|---|---|
+| `POST /mcp` | MCP over streamable HTTP, 27 tools |
+| `POST /cron/scan` | Scheduled scan. `?free_only=true` skips paid collectors |
+| `POST /cron/enrich` · `/cron/draft` | Apollo enrichment, batch drafting |
+| `GET /cron/digest?fmt=text` | Plain-text digest for Slack or email |
+| `GET /cron/alerts` | Machine-readable health |
+| `POST /cron/reconcile` | Recorded spend vs Apify's own figure |
 
 ## Schema notes
 

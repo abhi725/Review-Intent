@@ -8,7 +8,7 @@ changed and applied to signals already in the database.
 from datetime import datetime, timezone
 
 from intentdesk import db
-from intentdesk.collectors import availability, registry
+from intentdesk.collectors import RETIRED, availability, registry
 from intentdesk.services import (
     companies,
     leads,
@@ -63,8 +63,14 @@ async def rescore_all() -> dict:
     return {"companies_scored": scored, "leads_created": created}
 
 
-async def run(competitor: str | None = None) -> dict:
-    """Full scan. Returns a summary honest enough to debug from."""
+async def run(competitor: str | None = None, free_only: bool = False) -> dict:
+    """Full scan. Returns a summary honest enough to debug from.
+
+    `free_only` runs the collectors that cost nothing. It exists because the
+    first run of a new collector is also its first test, and being able to
+    exercise the orchestration — matching, scoring, the queue rebuild — without
+    committing budget is what makes that test cheap to repeat.
+    """
     started = datetime.now(timezone.utc)
 
     targets = [competitor] if competitor else [
@@ -90,6 +96,12 @@ async def run(competitor: str | None = None) -> dict:
     budget_exhausted = spent >= cap
 
     for coll in registry():
+        # `requires` is the honest proxy for "costs money": every paid provider
+        # here needs a token, and the two free collectors need none.
+        if free_only and coll.requires:
+            skipped.append({"collector": coll.name, "reason": "free-only run"})
+            continue
+
         if budget_exhausted and coll.requires:
             skipped.append({
                 "collector": coll.name,
@@ -164,7 +176,7 @@ async def run(competitor: str | None = None) -> dict:
 
     rescore = await rescore_all()
 
-    return {
+    summary = {
         "started_at": started.isoformat(),
         "seconds": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
         "competitors": targets,
@@ -176,6 +188,25 @@ async def run(competitor: str | None = None) -> dict:
         **rescore,
     }
 
+    # A scan that ran and found nothing and a scan that never ran look identical
+    # from the queue. Recording every run is what lets the digest tell them apart.
+    await db.execute(
+        """
+        INSERT INTO job_runs (job, started_at, finished_at, ok, detail)
+        VALUES ('scan', $1, now(), $2, $3::jsonb)
+        """,
+        started,
+        not any(c["errors"] for c in per_collector),
+        {
+            "signals_new": stored,
+            "collectors_ran": [c["collector"] for c in per_collector],
+            "errors": [e for c in per_collector for e in c["errors"]][:10],
+            "cost_usd": round(sum(c["cost_usd"] for c in per_collector), 4),
+        },
+    )
+
+    return summary
+
 
 async def status() -> dict:
     """What is wired up and what is still waiting on a token."""
@@ -184,4 +215,12 @@ async def status() -> dict:
         "collectors": avail,
         "ready": sum(1 for a in avail if a["available"]),
         "total": len(avail),
+        "retired": RETIRED,
+        "last_scan": await db.fetchrow(
+            """
+            SELECT started_at, finished_at, ok, detail
+            FROM job_runs WHERE job = 'scan'
+            ORDER BY started_at DESC LIMIT 1
+            """
+        ),
     }

@@ -20,6 +20,7 @@ from intentdesk.services import (
     companies,
     export,
     leads,
+    monitoring,
     preferences,
     scan,
     scoring,
@@ -103,9 +104,9 @@ async def update_draft(
 
 @mcp.tool()
 async def enrich_companies(limit: int = 25) -> dict:
-    """Enrich companies via Apollo: firmographics, phone, and the helpdesk they
-    actually run. Apollo's free plan has no person endpoints, so this returns
-    company-level data only — no contact names or emails."""
+    """Enrich companies via Apollo: firmographics, phone, and the ticketing
+    platform they actually run. Apollo's free plan has no person endpoints, so
+    this returns company-level data only — a phone number, never an email."""
     await _ready()
     from intentdesk.services import enrichment
 
@@ -184,11 +185,15 @@ async def collector_health(days: int = 7) -> list[dict]:
 
 # ------------------------------------------------------------------- scan
 @mcp.tool()
-async def run_scan(competitor: Optional[str] = None) -> dict:
-    """Collect, match, score and rebuild the queue. Costs money — paid
-    collectors bill per run, and the monthly cap is enforced before starting."""
+async def run_scan(competitor: Optional[str] = None, free_only: bool = False) -> dict:
+    """Collect, match, score and rebuild the queue.
+
+    Costs money — paid collectors bill per run, and the monthly cap is enforced
+    before starting. Pass free_only=True to run only the collectors that cost
+    nothing, which exercises the whole pipeline without committing budget.
+    """
     await _ready()
-    return await scan.run(competitor)
+    return await scan.run(competitor, free_only=free_only)
 
 
 @mcp.tool()
@@ -260,6 +265,87 @@ async def export_csv(status: Optional[str] = None, heat: Optional[str] = None) -
     """The queue as CSV text."""
     await _ready()
     return await export.leads_csv(status=status, heat=heat)
+
+
+@mcp.tool()
+async def suppress_domains(domains: list[str], reason: str = "bulk upload") -> dict:
+    """Never contact these domains again — a whole do-not-contact list at once.
+
+    Use for existing customers, live deals, and anyone who has asked not to be
+    contacted. Tolerates URLs and email addresses; reports what it could not
+    parse rather than dropping it.
+    """
+    await _ready()
+    return await companies.suppress_bulk(domains, reason)
+
+
+@mcp.tool()
+async def unsuppress_domain(domain: str) -> dict:
+    """Remove a domain from the suppression list so it can surface again."""
+    await _ready()
+    result = await db.execute(
+        "DELETE FROM suppression WHERE domain = $1", domain.lower().strip()
+    )
+    if result.endswith("0"):
+        return {"error": f"{domain} was not suppressed"}
+    return {"domain": domain.lower().strip(), "suppressed": False}
+
+
+@mcp.tool()
+async def enrich_company(company_id: int) -> dict:
+    """Enrich one specific company via Apollo, rather than a whole batch."""
+    await _ready()
+    from intentdesk.services import enrichment
+
+    try:
+        return await enrichment.enrich_company(company_id)
+    except (ValueError, enrichment.EnrichmentUnavailable) as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+async def draft_pending(limit: int = 10) -> dict:
+    """Draft outreach for the top contactable leads that have none yet.
+
+    On the phone channel this writes a spoken call opener, not an email — the
+    artifact follows the configured outreach channel.
+    """
+    await _ready()
+    from intentdesk.services import drafting
+
+    return await drafting.draft_pending(limit)
+
+
+# ----------------------------------------------------------- monitoring
+@mcp.tool()
+async def alerts() -> list[dict]:
+    """Everything currently wrong, worst first; empty means healthy.
+
+    Catches the two failures the queue cannot show: a collector that stopped
+    returning anything, and a cron that stopped firing. Check this before
+    concluding a quiet week is genuinely quiet.
+    """
+    await _ready()
+    return await monitoring.alerts()
+
+
+@mcp.tool()
+async def digest(days: int = 7, as_text: bool = False) -> dict | str:
+    """New leads, counts, spend and open alerts for the period."""
+    await _ready()
+    data = await monitoring.digest(days)
+    return monitoring.render_digest(data) if as_text else data
+
+
+@mcp.tool()
+async def reconcile_spend() -> dict:
+    """Check recorded spend against Apify's own monthly figure.
+
+    A gap means runs billed that this system never recorded — the direction that
+    lets the cap be enforced against an understatement.
+    """
+    await _ready()
+    return await monitoring.reconcile_spend()
 
 
 def main() -> None:

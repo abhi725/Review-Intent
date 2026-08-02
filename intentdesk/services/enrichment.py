@@ -119,6 +119,21 @@ async def enrich_company(company_id: int) -> dict:
         datetime.now(timezone.utc),
     )
 
+    # Push the number onto the live lead as well. The queue reads
+    # `leads.contact_phone`, so an enrichment that only updated `companies`
+    # produced a reachable company and an unreachable-looking lead.
+    if org.get("phone"):
+        await db.execute(
+            """
+            UPDATE leads SET contact_phone = COALESCE(contact_phone, $2),
+                             enrich_source = COALESCE(enrich_source, 'apollo')
+            WHERE company_id = $1 AND status = ANY($3::text[])
+            """,
+            company_id,
+            org.get("phone"),
+            ["NEW", "APPROVED"],
+        )
+
     return {
         "domain": company["domain"],
         "found": True,
@@ -139,14 +154,28 @@ async def enrich_pending(limit: int = 25) -> dict:
     if not available():
         return {"enriched": 0, "skipped": 0, "error": "APOLLO_API_KEY is not set"}
 
+    # Highest-scoring first, not oldest first. Apollo credits are finite and a
+    # never-enriched company at score 12 is worth less than a re-check on one at
+    # 88; within the same score, the stalest row still wins. Companies with no
+    # lead yet sort last rather than being excluded — they are how the queue grows.
     rows = await db.fetch(
         """
-        SELECT id FROM companies
-        WHERE domain NOT LIKE '%.example'
-        ORDER BY enriched_at NULLS FIRST, id
+        SELECT c.id
+        FROM companies c
+        LEFT JOIN LATERAL (
+            SELECT score FROM leads l
+            WHERE l.company_id = c.id AND l.status = ANY($2::text[])
+            ORDER BY score DESC LIMIT 1
+        ) top ON TRUE
+        WHERE c.domain NOT LIKE '%.example'
+          AND NOT EXISTS (SELECT 1 FROM suppression x WHERE x.domain = c.domain)
+        ORDER BY COALESCE(top.score, -1) DESC,
+                 c.enriched_at NULLS FIRST,
+                 c.id
         LIMIT $1
         """,
         limit,
+        ["NEW", "APPROVED"],
     )
 
     enriched = found = verified = 0

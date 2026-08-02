@@ -129,7 +129,8 @@ spend(id PK, day, provider, amount_usd)
 - **Phase 1 — done.** Schema, service layer, REST API, dashboard, deployed behind Traefik with Google OAuth.
 - **Phase 2 — partial.** Scoring, matching, CSV install-base import and scan orchestration built and tested. Every network collector is blocked on credentials; the Reddit collector is written but has never run. Apollo enrichment and the Claude drafter are not written — deliberately, until there is a key to test them against.
 - **Phase 3 — done, except the Sheets API.** The dashboard is fully operable: run scan, watchlist add/deactivate, editable targeting saved to the database, suppression removal, collector status panel. Export is CSV rather than a Sheets API write, which needs no service account and imports into Sheets directly.
-- **Phases 4–6 — not started.** MCP server, cron, digest, alerting, send automation.
+- **Phase 4 — done.** Our own MCP server, 17 tools over the same service layer, stdio plus streamable HTTP. Registered in `/root/.mcp.json`. Verified by driving it over stdio as a real client.
+- **Phases 5–6 — partly done.** Deploy is live (that came early, out of order); n8n cron, digest, alerting and send automation are not built.
 
 ## Phase 0 — Decide and probe · no code · ~half a session
 

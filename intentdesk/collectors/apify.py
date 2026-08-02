@@ -20,14 +20,7 @@ from intentdesk.config import settings
 
 API = "https://api.apify.com/v2"
 
-# Verified live. G2 renamed the Zendesk product, which is why the obvious guess
-# "zendesk-support-suite" 404s.
-G2_SLUGS = {
-    "zendesk": "zendesk-for-customer-service",
-    "freshdesk": "freshdesk",
-    "zoho desk": "zoho-desk",
-    "kayako": "kayako",
-}
+from intentdesk.market import G2_SLUGS
 
 NEGATIVE_AT_OR_BELOW = 3  # stars out of 5
 RECENCY_DAYS = 180

@@ -8,10 +8,10 @@ not accessible, even with a master key". Only `organizations/enrich` works.
 So this cannot produce a named decision maker or an email address. What it does
 give is worth having anyway:
 
-- `technology_names`, which reports the helpdesk a company actually runs. That
-  verifies (or discovers) the vendor without a BuiltWith subscription.
-- `estimated_num_employees`, which feeds size-band scoring far better than the
-  hand-entered agent counts a CSV import carries.
+- `technology_names`, which reports the ticketing platform a company actually
+  runs. That verifies the vendor without a BuiltWith subscription.
+- `estimated_num_employees`, which feeds size-band scoring far better than
+  hand-entered counts from a CSV import.
 - A company phone number — a real channel for a voice product, even with no
   email address.
 
@@ -25,16 +25,9 @@ import httpx
 
 from intentdesk import db
 from intentdesk.config import settings
+from intentdesk.market import VENDOR_MARKERS
 
 ENRICH_URL = "https://api.apollo.io/api/v1/organizations/enrich"
-
-# Substrings that identify a helpdesk product inside Apollo's technology list.
-VENDOR_MARKERS = {
-    "Zendesk": ("zendesk",),
-    "Freshdesk": ("freshdesk",),
-    "Zoho Desk": ("zoho desk", "zohodesk"),
-    "Kayako": ("kayako",),
-}
 
 
 class EnrichmentUnavailable(RuntimeError):
@@ -46,7 +39,7 @@ def available() -> bool:
 
 
 def detect_vendors(technology_names: list[str]) -> list[str]:
-    """Which tracked helpdesk products appear in Apollo's technology list."""
+    """Which tracked ticketing platforms appear in Apollo's technology list."""
     lowered = [t.lower() for t in technology_names or []]
     found = []
     for vendor, markers in VENDOR_MARKERS.items():
@@ -132,7 +125,7 @@ async def enrich_company(company_id: int) -> dict:
         "employees": org.get("estimated_num_employees"),
         "industry": org.get("industry"),
         "phone_found": bool(org.get("phone")),
-        "helpdesk_detected": vendors,
+        "platforms_detected": vendors,
         "vendor_verified": verified,
     }
 

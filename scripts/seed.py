@@ -15,12 +15,7 @@ from datetime import datetime, timedelta, timezone
 from intentdesk import db
 from intentdesk.services import companies, leads, signals, watchlist
 
-COMPETITORS = [
-    ("Zendesk", ["tech", "jobs", "g2", "capterra", "reddit", "vendor_news"]),
-    ("Freshdesk", ["tech", "jobs", "g2", "capterra", "reddit", "vendor_news"]),
-    ("Zoho Desk", ["tech", "jobs", "g2", "capterra"]),
-    ("Kayako", ["tech", "g2"]),
-]
+from intentdesk.market import COMPETITORS  # noqa: E402
 
 now = datetime.now(timezone.utc)
 

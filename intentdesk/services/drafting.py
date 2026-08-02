@@ -9,13 +9,10 @@ unsettling to receive and, where the reviewer is identifiable, a use of their
 words they did not agree to. The draft speaks to the industry problem instead.
 """
 
-from intentdesk import db, llm
+from intentdesk import db, llm, market
 from intentdesk.services import leads, preferences
 
-COMPLAINT_CATEGORIES = [
-    "pricing_increase", "high_fees", "slow_support", "complex_setup",
-    "missing_feature", "reliability", "poor_integrations", "billing_dispute",
-]
+COMPLAINT_CATEGORIES = market.COMPLAINT_CATEGORIES
 
 ANALYSIS_SCHEMA = {
     "type": "object",
@@ -30,7 +27,7 @@ ANALYSIS_SCHEMA = {
 }
 
 ANALYSIS_SYSTEM = (
-    "You classify complaints about helpdesk software from public reviews and "
+    f"You classify complaints about {market.PLATFORM_NOUN}s from public reviews and "
     "forum posts. Return the single best-fitting category, a one-sentence "
     "statement of the underlying complaint, a severity from 1 to 5, and the "
     "reviewer's employer if — and only if — it is named outright in the text. "
@@ -40,8 +37,8 @@ ANALYSIS_SYSTEM = (
 )
 
 DRAFT_SYSTEM = (
-    "You write short cold outreach emails from an Indian SME software vendor to "
-    "companies running a competitor's helpdesk.\n\n"
+    f"You write short cold outreach emails from an Indian SME software vendor to "
+    f"{market.BUYER_ROLE}s running a competitor's {market.PLATFORM_NOUN}.\n\n"
     "Hard rules:\n"
     "- Never mention, quote, or allude to any review, forum post, job listing "
     "or other signal. Write as though you had never seen one.\n"
@@ -84,7 +81,7 @@ async def draft_for_lead(lead_id: int) -> dict:
             f"Company: {lead['company']}",
             f"City: {lead.get('city') or 'unknown'}",
             f"Currently runs: {lead['vendor']}",
-            f"Support team size: {lead.get('agents_est') or 'unknown'} agents",
+            f"Company size: {lead.get('employees_est') or lead.get('agents_est') or 'unknown'} staff",
             f"Recipient role: {lead.get('contact_title') or 'unknown'}",
             f"What we sell: {prefs['value_proposition']}",
         ]

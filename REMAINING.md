@@ -41,19 +41,30 @@ Items 1–3 are the ones that matter. The rest are incremental.
 
 ---
 
-## Phase A — Make leads contactable · ~1 session · **blocked on Apollo key**
+## Phase A — Contactability · partly done · **decision needed**
 
-Without this the queue can never produce an actionable lead, so it comes first.
+Apollo key is connected and working, but **the free plan blocks every person
+endpoint** — `people/match`, `mixed_people/search` and `mixed_companies/search`
+all return 403 "not included in your Free plan… even with a master key".
+Verified live on 2026-08-02. So there is no route to an email address on this
+plan, and no amount of code changes that.
 
-1. `collectors/apollo.py` — `people/match` by company domain, `X-Api-Key` header.
-2. Enrich only the top slice per scan (highest score first) to protect quota.
-3. Persist contact name, title, email, LinkedIn, and `enrich_source`.
-4. Record per-call spend against the monthly cap, as the Apify collectors do.
-5. Report the identifiable rate in `stats()` — the number that decides whether
-   this channel is worth continuing.
+**Done** — `organizations/enrich` is the one endpoint that works, and it earns
+its place: `technology_names` reports the helpdesk a company actually runs
+(vendor verification without a BuiltWith subscription), plus employee count,
+industry, city, and a **company phone number**.
 
-**Exit test:** a real company in the queue carries a named decision maker and a
-verified email, and `stats().identifiable_pct` reflects the true rate.
+**The open decision is which channel to build on:**
+
+- **Phone-first (free).** Apollo already returns company phone numbers. For a
+  business selling AI voice, calling is on-brand and arguably a better fit than
+  cold email. Costs nothing more and works today.
+- **Email (paid).** Person endpoints need a paid Apollo plan. Only worth it if
+  cold email is genuinely the motion you want.
+
+Remaining either way: report the contactable rate in `stats()` so the channel
+can be judged on evidence, and switch `enrich_pending` to run over the highest
+scoring companies first once volume grows.
 
 ## Phase B — Draft quality · ~half a session · **blocked on your value prop**
 

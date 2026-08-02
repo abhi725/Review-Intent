@@ -136,6 +136,23 @@ SUBREDDITS = (
 # back thinking they were an oversight.
 SUBREDDITS_WRONG_AUDIENCE = ("festivals", "aves", "Music", "India")
 
+# Reddit access, tested 2026-08-02 — cost $0.24 of the Apify budget to learn:
+#
+# 1. Direct, unauthenticated: blocked on every path from this VM.
+#    search.json 403, search.rss 200-but-empty, new.rss 429.
+# 2. Apify `trudax/reddit-scraper-lite` (pay-per-event, works on the free
+#    plan): runs fine but is **global-search only**. Both scoping methods
+#    return zero — `searchCommunityName` and a subreddit search `startUrls`.
+#    A global search for "eventbrite" returned 10 posts, 7 mentioning it, and
+#    **0 usable organiser complaints**: the hits were people *advertising*
+#    events on Eventbrite plus an unrelated scam warning.
+#
+# Conclusion: paying to scrape Reddit globally buys noise. The value is in
+# subreddit-scoped search, and only the official API can do that — which needs
+# the free OAuth app credentials the collector already expects. Do not spend
+# more Apify budget here.
+REDDIT_ACCESS_NOTE = "official API only; Apify global search yields no usable signal"
+
 # Wording the prompts use, so market language lives beside the market.
 BUYER_ROLE = "event organiser"
 PLATFORM_NOUN = "event ticketing platform"

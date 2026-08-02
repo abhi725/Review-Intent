@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str
     api_port: int = 8100
     mcp_http_port: int = 8110
+    mcp_bearer_token: str = ""
     session_secret: str = "dev-only-not-a-secret"
 
     google_client_id: str = ""

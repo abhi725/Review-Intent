@@ -28,7 +28,9 @@ from intentdesk.services import (
 )
 from intentdesk.services import stats as stats_service
 
-mcp = FastMCP("intent-desk")
+# streamable_http_path="/" puts the endpoint at the mount root. The default is
+# "/mcp", which would land at /mcp/mcp once mounted under /mcp in the API app.
+mcp = FastMCP("intent-desk", streamable_http_path="/")
 
 
 async def _ready() -> None:

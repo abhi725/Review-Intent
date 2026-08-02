@@ -35,5 +35,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # --proxy-headers is load-bearing: without it the OAuth callback URL is built as
 # http:// behind Traefik and Google rejects it as a redirect_uri mismatch.
-CMD ["uvicorn", "intentdesk.api.app:app", "--host", "0.0.0.0", "--port", "8100", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Migrations run before the app so a deploy against an empty database
+# provisions itself. Already-applied files are skipped, and a failure here
+# aborts startup rather than serving against a half-built schema.
+CMD ["sh", "-c", "python -m intentdesk.migrate && exec uvicorn intentdesk.api.app:app --host 0.0.0.0 --port 8100 --proxy-headers --forwarded-allow-ips '*'"]

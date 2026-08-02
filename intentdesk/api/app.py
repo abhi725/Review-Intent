@@ -23,15 +23,27 @@ from intentdesk.services import (
 )
 
 
+from intentdesk.api.bearer import BearerAuthASGI, NormalizeMountPath
+from intentdesk.mcp.server import mcp as mcp_server
+
+# Build the ASGI app first — FastMCP creates the session manager lazily and it
+# is only reachable after this call.
+_mcp_asgi = mcp_server.streamable_http_app()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
-    yield
+    # A mounted sub-app's own lifespan never runs, so the MCP session manager
+    # has to be started here. Without it every /mcp request hangs.
+    async with mcp_server.session_manager.run():
+        yield
     await db.disconnect()
 
 
 app = FastAPI(title="Intent Desk", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+app.add_middleware(NormalizeMountPath, mount="/mcp")
 
 
 # ----------------------------------------------------------------- auth
@@ -297,6 +309,13 @@ async def api_export_csv(
         media_type="text/csv",
         headers={"content-disposition": 'attachment; filename="intent-desk-leads.csv"'},
     )
+
+
+# ------------------------------------------------------ MCP over HTTP
+# Mounted here rather than on its own subdomain: no DNS record, no second
+# container, and TLS is already terminated for this host. Must be mounted
+# before the catch-all static mount below, since routes match in order.
+app.mount("/mcp", BearerAuthASGI(_mcp_asgi, settings.mcp_bearer_token))
 
 
 # ----------------------------------------------- static dashboard bundle

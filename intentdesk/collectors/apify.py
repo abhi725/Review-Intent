@@ -147,6 +147,10 @@ class CapterraReviewCollector(Collector):
     kind = "review"
     requires = ("apify_token",)
     actor = "gio21~capterra-reviews-scraper"
+    known_broken = (
+        "Capterra returns 403 to this actor; it needs residential proxies, "
+        "which the free Apify plan does not include"
+    )
 
     def __init__(self, max_items: int = 20):
         self.max_items = max_items

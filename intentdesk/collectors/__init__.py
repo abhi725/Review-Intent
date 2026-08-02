@@ -33,11 +33,16 @@ class Collector:
     kind: str = "install"
     requires: tuple[str, ...] = ()
 
+    # Set when a collector is credential-ready but known not to work, so status
+    # never reports READY for something that fails on every run. Capterra is the
+    # case this exists for: the token is valid, the source blocks the scrape.
+    known_broken: str = ""
+
     def missing_credentials(self) -> list[str]:
         return [r for r in self.requires if not getattr(settings, r, "")]
 
     def available(self) -> bool:
-        return not self.missing_credentials()
+        return not self.missing_credentials() and not self.known_broken
 
     async def collect(self, competitor: str) -> list[RawSignal]:
         raise NotImplementedError
@@ -87,6 +92,7 @@ def availability() -> list[dict]:
             "available": c.available(),
             "missing": c.missing_credentials(),
             "implemented": not isinstance(c, NotYetBuilt),
-            "note": getattr(c, "note", None),
+            "note": getattr(c, "note", None) or c.known_broken or None,
+            "known_broken": c.known_broken or None,
         })
     return out

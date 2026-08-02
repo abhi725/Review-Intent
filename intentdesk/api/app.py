@@ -234,6 +234,27 @@ async def api_draft_pending(limit: int = 10, user: dict = Depends(require_user))
     return await drafting.draft_pending(limit)
 
 
+# ----------------------------------------------------------- enrichment
+@app.post("/api/companies/{company_id}/enrich")
+async def api_enrich_company(company_id: int, user: dict = Depends(require_user)):
+    from intentdesk.services import enrichment
+
+    try:
+        return await enrichment.enrich_company(company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except enrichment.EnrichmentUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/enrich")
+async def api_enrich_pending(limit: int = 25, user: dict = Depends(require_user)):
+    """Enrich the least-recently-enriched companies via Apollo."""
+    from intentdesk.services import enrichment
+
+    return await enrichment.enrich_pending(limit)
+
+
 # ----------------------------------------------------------------- scan
 @app.post("/api/scan")
 async def api_scan(competitor: Optional[str] = None, user: dict = Depends(require_user)):

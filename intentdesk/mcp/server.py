@@ -102,6 +102,17 @@ async def update_draft(
 
 
 @mcp.tool()
+async def enrich_companies(limit: int = 25) -> dict:
+    """Enrich companies via Apollo: firmographics, phone, and the helpdesk they
+    actually run. Apollo's free plan has no person endpoints, so this returns
+    company-level data only — no contact names or emails."""
+    await _ready()
+    from intentdesk.services import enrichment
+
+    return await enrichment.enrich_pending(limit)
+
+
+@mcp.tool()
 async def redraft(lead_id: int) -> dict:
     """Regenerate a lead's outreach draft with the configured LLM provider.
 

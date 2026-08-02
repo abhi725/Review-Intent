@@ -19,7 +19,10 @@ class Settings(BaseSettings):
 
     google_client_id: str = ""
     google_client_secret: str = ""
-    allowed_email_domain: str = "swandigitals.com"
+    # Empty on purpose. Anyone can sign in, so there is no domain to name — and
+    # a default here would be a restriction nobody asked for, silently waiting
+    # for someone to switch access_mode and discover it.
+    allowed_email_domain: str = ""
     # Seeds the runtime `access_mode` preference on a fresh database; the stored
     # setting wins after that, so changing access does not need a redeploy.
     access_mode: str = "open"
@@ -53,8 +56,9 @@ class Settings(BaseSettings):
 
     @property
     def allowed_email_domains(self) -> list[str]:
-        """ALLOWED_EMAIL_DOMAIN accepts a comma-separated list, so the desk can
-        be shared across more than one company domain without a code change."""
+        """Seed value only. Access is decided at runtime by
+        `services.users.check_allowed`, which reads the stored setting — nothing
+        in the request path reads this."""
         return [
             d.strip().lower().lstrip("@")
             for d in self.allowed_email_domain.split(",")

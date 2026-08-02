@@ -861,7 +861,7 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress, onBulk
               <input
                 aria-label="Allowed email domains"
                 value={current.allowed_email_domains ?? ""}
-                placeholder="swandigitals.com, partner.com"
+                placeholder="example.com, partner.com — only used by the two modes above"
                 onChange={(e) => set("allowed_email_domains", e.target.value)}
               />
             </div>
@@ -869,9 +869,9 @@ function Settings({ prefs, collectors, suppression, onSave, onUnsuppress, onBulk
               <div className="alert alert-warning" style={{ marginTop: 8 }}>
                 <b>Open</b>
                 <span>
-                  Anyone with a Google account and this URL can read the lead
-                  queue, drafts and suppression list. Switch to “Our domain only”
-                  to limit it.
+                  Anyone with this URL can sign up and read the lead queue,
+                  drafts and suppression list. No domain restriction is in
+                  force. The other two modes are here for when you want one.
                 </span>
               </div>
             ) : (

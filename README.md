@@ -90,18 +90,23 @@ already has a password account links the two rather than creating a second one.
 **The first account created becomes the admin**, so a fresh deploy is never
 locked out of its own access settings.
 
+**Access is open: anyone can sign in.** No company domain is required, and none
+is configured — `ALLOWED_EMAIL_DOMAIN` ships empty so a default cannot quietly
+become a restriction later.
+
 `access_mode` is a runtime setting, changed in Settings without a redeploy, and
 is checked on **every sign-in** rather than only at registration — so tightening
 it locks out accounts created while it was loose:
 
 | Mode | Who gets in |
 |---|---|
-| `open` *(current)* | Anyone with a Google account, and any address may register |
+| `open` *(current)* | Anyone. Any address may register; any Google account may sign in |
 | `domain` | Only `allowed_email_domains` |
 | `allowlist` | Those domains, plus addresses that already have an account |
 
-Switching to `domain` or `allowlist` with an empty domain list is refused — that
-lockout costs a `psql` session to undo.
+`allowed_email_domains` is ignored entirely in `open` mode. Switching to
+`domain` or `allowlist` with an empty list is refused — that lockout costs a
+`psql` session to undo.
 
 ### Bearer-authenticated
 

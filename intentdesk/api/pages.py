@@ -144,7 +144,7 @@ def _message(error: str = "", notice: str = "") -> str:
 
 def _access_line(mode: str, domains: list[str]) -> str:
     if mode == "open":
-        return "Open to any Google account."
+        return "Anyone can sign in — no invite and no company domain needed."
     listed = ", ".join("@" + d for d in domains) or "an approved domain"
     if mode == "allowlist":
         return f"{listed}, plus individually approved addresses."
@@ -158,7 +158,8 @@ def login_page(
     <div class='wrap'><div class='card'>
       {_mark()}
       <h1>Sign in</h1>
-      <p class='sub'>Work the lead queue, review drafts, and run scans.</p>
+      <p class='sub'>Work the lead queue, review drafts, and run scans.
+      Any email address works.</p>
       {_message(error, notice)}
 
       <a class='btn btn-google' href='/auth/login'>{_GOOGLE_MARK} Continue with Google</a>
@@ -169,7 +170,7 @@ def login_page(
         <div class='field'>
           <label for='email'>Email</label>
           <input id='email' name='email' type='email' autocomplete='username'
-                 required value='{escape(email)}' placeholder='you@swandigitals.com'>
+                 required value='{escape(email)}' placeholder='you@example.com'>
         </div>
         <div class='field'>
           <label for='password'>Password</label>
@@ -198,8 +199,8 @@ def signup_page(
     <div class='wrap'><div class='card'>
       {_mark()}
       <h1>Create your account</h1>
-      <p class='sub'>Signing in with Google needs no password at all — it is the
-      shorter path and there is nothing to remember.</p>
+      <p class='sub'>Open to anyone — any email address, no invite needed.
+      Google needs no password at all, so it is the shorter path.</p>
       {_message(error, notice)}
 
       <a class='btn btn-google' href='/auth/login'>{_GOOGLE_MARK} Continue with Google</a>
@@ -215,7 +216,7 @@ def signup_page(
         <div class='field'>
           <label for='email'>Email</label>
           <input id='email' name='email' type='email' autocomplete='username'
-                 required value='{escape(email)}' placeholder='you@swandigitals.com'>
+                 required value='{escape(email)}' placeholder='you@example.com'>
         </div>
         <div class='field'>
           <label for='password'>Password</label>

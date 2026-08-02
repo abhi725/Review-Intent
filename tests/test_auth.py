@@ -248,10 +248,23 @@ def test_pages_escape_user_supplied_values():
 
 
 def test_login_page_states_the_access_rule():
-    assert "Open to any Google account." in pages.login_page("open", [])
-    assert "@swandigitals.com addresses only." in pages.login_page(
-        "domain", ["swandigitals.com"]
-    )
+    assert "Anyone can sign in" in pages.login_page("open", [])
+    assert "@example.com addresses only." in pages.login_page("domain", ["example.com"])
+
+
+def test_no_company_domain_is_baked_into_the_default_config():
+    """The default must not name a domain. One sitting in config reads as a
+    restriction and waits to become one the moment access_mode changes."""
+    from intentdesk.config import Settings
+
+    assert Settings.model_fields["allowed_email_domain"].default == ""
+    assert Settings.model_fields["access_mode"].default == "open"
+
+
+def test_open_mode_pages_never_name_a_required_domain():
+    for html in (pages.login_page("open", []), pages.signup_page("open", [])):
+        assert "addresses only" not in html
+        assert "you@example.com" in html  # a generic placeholder, not a company
 
 
 def test_pages_are_not_indexable():

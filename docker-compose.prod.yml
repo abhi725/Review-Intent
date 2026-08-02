@@ -17,7 +17,11 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env.prod}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-swandigitals.com}
+      # Empty default on purpose: access is open, and this only seeds the
+      # `allowed_email_domains` setting for the two restricted modes. A value
+      # here would quietly become a restriction the day someone changes mode.
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-}
+      ACCESS_MODE: ${ACCESS_MODE:-open}
       MONTHLY_SPEND_CAP_USD: ${MONTHLY_SPEND_CAP_USD:-35}
       MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:?set MCP_BEARER_TOKEN in .env.prod}
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}

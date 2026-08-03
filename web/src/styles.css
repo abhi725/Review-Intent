@@ -298,6 +298,12 @@ label.fact { display: block; cursor: text; }
 .empty { padding: 40px 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
 .error { margin: 18px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--hot-soft); color: var(--hot); font-size: 13px; }
 
+/* A caught render error. Shown in place of the screen that failed, so the fault
+   is readable and quotable rather than a blank page. */
+.crash { margin: 24px; padding: 20px 22px; border: 1px solid var(--line); border-left: 3px solid var(--hot); border-radius: 10px; background: var(--surface); }
+.crash h2 { margin: 0 0 6px; font-size: 15px; color: var(--hot); }
+.crash-detail { margin: 12px 0 14px; padding: 12px 14px; max-height: 320px; overflow: auto; border-radius: 8px; background: var(--hot-soft); color: var(--ink-1); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
 /* ----------------------------------------------------------------- feed */
 .feed { display: flex; flex-direction: column; }
 .feed-item { display: grid; grid-template-columns: 104px 1fr auto; gap: 14px; padding: 12px 15px; border-bottom: 1px solid var(--line); align-items: start; }

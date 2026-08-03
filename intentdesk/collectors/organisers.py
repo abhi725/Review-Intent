@@ -498,10 +498,37 @@ async def store(organisers: list[Organiser]) -> dict:
     return {"seen": len(organisers), "new": new}
 
 
-async def discover(limit: int = 500) -> dict:
-    """Run every discovery source. Free, so this is safe on a schedule."""
-    totals = {"seen": 0, "new": 0, "by_source": {}}
+def discovery_class(name: str):
+    """One discovery source by name, or None.
+
+    Discovery sources are advertised by `collectors.availability()` but are not in
+    `collectors.registry()`, because they find companies rather than evidence and
+    do not share the signal-collector interface. Anything that needs to resolve a
+    source name to *either* kind has to consult both, so the lookup lives here
+    rather than being rebuilt at each call site.
+    """
     for cls in DISCOVERY:
+        if cls.name == name:
+            return cls
+    return None
+
+
+async def discover(limit: int = 500, source: Optional[str] = None) -> dict:
+    """Run discovery sources. Free, so this is safe on a schedule.
+
+    `source` runs a single platform, which is what the per-source button on the
+    Sources screen needs; the default runs all of them for the cron.
+    """
+    if source is not None:
+        cls = discovery_class(source)
+        if cls is None:
+            raise ValueError(f"no discovery source named {source!r}")
+        chosen = (cls,)
+    else:
+        chosen = DISCOVERY
+
+    totals = {"seen": 0, "new": 0, "by_source": {}}
+    for cls in chosen:
         coll = cls(limit=limit)
         try:
             found = await coll.collect()

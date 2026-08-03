@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
+import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import { ExportPanel, Sources } from "./Sources.jsx";
 
 const SCREENS = {
@@ -377,6 +378,10 @@ export default function App() {
         {error ? <div className="error">Could not load: {error}</div> : null}
         <AlertBar alerts={alerts} />
 
+        {/* Scoped to the screen area, not the whole app: when one screen throws,
+            the nav has to stay usable so the other screens are still reachable.
+            Keyed on `screen` so switching away clears the previous failure. */}
+        <ErrorBoundary resetKey={screen}>
         {screen === "queue" ? (
           <>
             <Kpis stats={stats} />
@@ -500,6 +505,7 @@ export default function App() {
             }}
           />
         ) : null}
+        </ErrorBoundary>
       </main>
 
       {toast ? (

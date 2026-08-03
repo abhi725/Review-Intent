@@ -885,10 +885,23 @@ async def api_collect_estimate(
     disabled with that reason rather than failing on click.
     """
     from intentdesk.collectors import PRICED_ACTION, get as get_collector
+    from intentdesk.collectors.organisers import discovery_class
     from intentdesk.services import spend
 
     coll = get_collector(source)
     if coll is None:
+        # Discovery sources are advertised by /api/sources, so the screen prices
+        # every row it renders. 404-ing here made three of those rows quote
+        # nothing and their buttons fail on click.
+        if discovery_class(source) is not None:
+            return {
+                "source": source,
+                "competitor": competitor,
+                "estimate": spend.estimate("discover_organisers", n),
+                "spend": await spend.month_to_date(),
+                "blocked": None,
+                "allowed": True,
+            }
         raise HTTPException(status_code=404, detail=f"No collector named {source!r}")
 
     action = PRICED_ACTION.get(source, f"collect_{source}")
@@ -930,10 +943,29 @@ async def api_collect(body: CollectBody, user: dict = Depends(require_admin)):
     the fact rather than indistinguishable from a cap that never applied.
     """
     from intentdesk.collectors import PRICED_ACTION, get as get_collector
+    from intentdesk.collectors import organisers
+    from intentdesk.collectors.organisers import discovery_class
     from intentdesk.services import spend
 
     coll = get_collector(body.source)
     if coll is None:
+        # A discovery source finds companies rather than evidence, so it does not
+        # go through scan.run() — but the Sources screen offers it a Run button
+        # like any other row, and that button has to do the right thing.
+        if discovery_class(body.source) is not None:
+            result = await organisers.discover(limit=100, source=body.source)
+            per = result["by_source"].get(body.source, {})
+            return {
+                "collectors_ran": [{
+                    "collector": body.source,
+                    "found": per.get("seen", 0),
+                    "new": per.get("new", 0),
+                    "cost_usd": 0.0,
+                }],
+                "collectors_skipped": [],
+                "cost_usd": 0.0,
+                "discovery": result,
+            }
         raise HTTPException(status_code=404, detail=f"No collector named {body.source!r}")
 
     if body.competitor and hasattr(coll, "check"):

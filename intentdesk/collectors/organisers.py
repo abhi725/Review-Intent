@@ -307,7 +307,177 @@ class TownscriptOrganisers:
             return out
 
 
-DISCOVERY = (MeraEventsOrganisers, TownscriptOrganisers)
+class EventbriteOrganisers:
+    """Eventbrite's organiser sitemap — the source that closes the audience gap.
+
+    The gap this exists to fix: discovery found MeraEvents organisers, while every
+    classified complaint we hold is about Eventbrite. Both halves worked and no
+    lead could reach a pattern-based draft, because no discovered company ran the
+    platform we had evidence about. The fix is not another review source — it is
+    companies on the platform whose complaints are already classified.
+
+    `sitemap_index.xml` lists `organizer_profile_pages00/01.xml.gz`, 50,000 URLs
+    each. Verified 2026-08-03, $0 spent, robots.txt served 200 with no rule
+    against `/sitemap_xml/` or `/o/`.
+
+    Two things make this cheaper than every other collector here. The name is in
+    the URL, so ~100,000 organisers cost **two** HTTP requests rather than
+    100,000 — MeraEvents needs a page fetch per profile for its <title>. And the
+    files are already gzipped by the sitemap convention, so a full pass is about
+    a megabyte.
+
+    The cost is name quality: a slug is lowercased and punctuation-stripped, so
+    "IIT Bombay" arrives as "iit-bombay" and cannot be reversed reliably. That is
+    the right trade here — a slug name is a *search key* for resolution, not the
+    name we display, and `resolving` overwrites it with whatever Apollo returns
+    while its confidence gate holds the matches it is unsure about.
+
+    **The sitemap carries no country**, and most Eventbrite organisers are
+    American. So `INDIA_HINT` only *orders* the batch, putting likely-Indian
+    slugs first; it does not filter, because a slug is not evidence of location
+    and pretending otherwise would silently discard real leads. Country arrives
+    at resolution, from Apollo.
+    """
+
+    name = "eventbrite_organisers"
+    kind = "install"
+    cadence = "scheduled"
+    cost_model = "free"
+    platform = "Eventbrite"
+    base = "https://www.eventbrite.com"
+    sitemap_path = "/sitemap_xml/sitemap_index.xml"
+
+    # Trailing numeric id on every profile slug: /o/<name-slug>-106164911461
+    SLUG = re.compile(r"/o/(?P<slug>[^/?#]+?)-(?P<id>\d{6,})/?$")
+    # Eventbrite slugifies "&" to "amp" between hyphens.
+    AMP = re.compile(r"(?:^|-)amp(?:-|$)")
+
+    # Ordering only — see the class docstring. **Place names only, on evidence.**
+    #
+    # The first version of this included the obvious words: india, indian, desi,
+    # hindi, tamil, iit, iim. Run against the live sitemap it returned "IIT Bay
+    # Area Alumni Association", "Indian Health Center of Santa Clara Valley",
+    # "Desi Comedy Fest" and "West Indian American Day Carnival Association" —
+    # US diaspora organisations, plus one Caribbean one that "indian" matched
+    # inside "West Indian". Eventbrite's organiser base is overwhelmingly
+    # American, so Indian-*named* US groups outnumber actual Indian companies and
+    # an ethnicity token sorts the wrong ones to the front, where they consume the
+    # batch and then the resolution budget.
+    #
+    # An Indian city in the slug is much weaker evidence of ethnicity and much
+    # stronger evidence of location, which is the only thing being guessed at.
+    INDIA_HINT = re.compile(
+        r"\b(bengaluru|bangalore|mumbai|new-delhi|delhi|ncr|gurgaon|gurugram|"
+        r"noida|hyderabad|chennai|kolkata|pune|ahmedabad|jaipur|kochi|cochin|"
+        r"surat|indore|lucknow|nagpur|chandigarh|bhopal|coimbatore|visakhapatnam|"
+        r"vizag|mysore|mysuru|thiruvananthapuram|trivandrum|goa|kerala|punjab|"
+        r"gujarat|maharashtra|karnataka|telangana|rajasthan|odisha|assam)\b"
+    )
+
+    def __init__(self, limit: int = 500):
+        self.limit = limit
+        self.last_cost_usd = 0.0
+
+    def _name_of(self, url: str) -> Optional[str]:
+        m = self.SLUG.search(url)
+        if not m:
+            return None
+        slug = self.AMP.sub(" & ", m.group("slug"))
+        name = re.sub(r"[-_]+", " ", slug)
+        name = re.sub(r"\s+", " ", name).strip()
+        # A bare handle ("bing0121") is a person's account name, not a company
+        # anything downstream can resolve. One word containing digits is the
+        # reliable signature; "9 Blocks Photography" must survive, so the test
+        # is on a single token only.
+        if len(name) < 3:
+            return None
+        if " " not in name and re.search(r"\d", name):
+            return None
+        return name.title()
+
+    async def _sitemap_files(self, client: httpx.AsyncClient) -> list[str]:
+        """Read the index rather than hardcoding 00 and 01.
+
+        Eventbrite adds files as it grows; a hardcoded pair would silently stop
+        covering the tail, which reads as "discovery is complete" rather than as
+        a bug.
+        """
+        r = await client.get(f"{self.base}{self.sitemap_path}")
+        r.raise_for_status()
+        return [u for u in _locs(r.content) if "organizer_profile_pages" in u]
+
+    @staticmethod
+    def _body(response: httpx.Response) -> bytes:
+        """These end in .gz. httpx transparently decodes `Content-Encoding: gzip`
+        but this is gzip *content*, so it usually arrives compressed — and
+        occasionally not, depending on how the CDN answers. Try, then fall back,
+        rather than assuming either."""
+        raw = response.content
+        if raw[:2] == b"\x1f\x8b":
+            import gzip
+
+            return gzip.decompress(raw)
+        return raw
+
+    async def collect(self) -> list[Organiser]:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": UA}, timeout=TIMEOUT, follow_redirects=True
+        ) as client:
+            if not await robots_allows(client, self.base, self.sitemap_path):
+                return []
+
+            files = await self._sitemap_files(client)
+            log.info("%s: %d organiser sitemap files", self.name, len(files))
+
+            known = {
+                row["profile_url"]
+                for row in await db.fetch(
+                    "SELECT profile_url FROM organisers WHERE source = $1", self.name
+                )
+                if row["profile_url"]
+            }
+
+            urls: list[str] = []
+            for url in files:
+                await asyncio.sleep(DELAY_S)
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                except httpx.HTTPError as exc:
+                    log.warning("%s: %s unreadable (%s)", self.name, url, exc)
+                    continue
+                urls.extend(_locs(self._body(resp)))
+                # Stop pulling files once there is enough new material for this
+                # batch. The second file is another 50,000 URLs nobody asked for.
+                if len([u for u in urls if u not in known]) >= self.limit:
+                    break
+
+            fresh = [u for u in urls if u not in known]
+            log.info("%s: %d in sitemaps, %d new", self.name, len(urls), len(fresh))
+
+            # India first, everything else after — not instead of.
+            fresh.sort(key=lambda u: 0 if self.INDIA_HINT.search(u.lower()) else 1)
+
+            seen, out = set(), []
+            for url in fresh:
+                if len(out) >= self.limit:
+                    break
+                name = self._name_of(url)
+                if not name or name.lower() in seen:
+                    continue
+                seen.add(name.lower())
+                out.append(
+                    Organiser(
+                        name=name,
+                        platform=self.platform,
+                        source=self.name,
+                        profile_url=url,
+                    )
+                )
+            return out
+
+
+DISCOVERY = (EventbriteOrganisers, MeraEventsOrganisers, TownscriptOrganisers)
 
 
 async def store(organisers: list[Organiser]) -> dict:

@@ -1101,6 +1101,22 @@ async def cron_scan(competitor: Optional[str] = None):
     return await scan.run(competitor, free_only=True, actor_email="cron")
 
 
+@cron.post("/discover")
+async def cron_discover(limit: int = 500):
+    """Walk the organiser sitemaps on the schedule.
+
+    Discovery is free — a sitemap fetch, no actor and no credits — so by the same
+    rule that keeps paid collectors off this router, it belongs *on* it. It was
+    reachable only through POST /api/discover, which needs a browser session,
+    so the organiser pool grew only when somebody remembered to click. The
+    expensive half stays a click: resolving a name into a domain bills per row
+    and lives at POST /api/resolve.
+    """
+    from intentdesk.collectors import organisers
+
+    return await organisers.discover(limit=limit)
+
+
 @cron.post("/enrich")
 async def cron_enrich(limit: int = 25):
     from intentdesk.services import enrichment

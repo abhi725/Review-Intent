@@ -25,6 +25,37 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/discover",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "500" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "discover",
+      "name": "0. Discover organisers (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-580, 300],
+      "notes": "Walks the MeraEvents organiser sitemap — a plain fetch, no actor and no credits, which is why it runs here rather than on a button. 500 a week against 7,273 known profiles. Turning a *name* into a domain is the part that bills, and that stays at POST /api/resolve behind an admin session."
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "https://intent.swandigitals.com/cron/scan",
         "sendHeaders": true,
         "headerParameters": {
@@ -236,6 +267,9 @@
   ],
   "connections": {
     "Monday 03:15 IST": {
+      "main": [[{ "node": "0. Discover organisers (free)", "type": "main", "index": 0 }]]
+    },
+    "0. Discover organisers (free)": {
       "main": [[{ "node": "1. Scan (free collectors only)", "type": "main", "index": 0 }]]
     },
     "1. Scan (free collectors only)": {

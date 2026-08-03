@@ -152,8 +152,19 @@ def _access_line(mode: str, domains: list[str]) -> str:
 
 
 def login_page(
-    mode: str, domains: list[str], error: str = "", notice: str = "", email: str = ""
+    mode: str, domains: list[str], error: str = "", notice: str = "",
+    email: str = "", unverified: bool = False,
 ) -> str:
+    # Only rendered after a correct password against an unconfirmed account, so
+    # this button cannot be used to probe which addresses exist.
+    resend = ""
+    if unverified:
+        resend = f"""
+      <form method='post' action='/auth/verify/resend'>
+        <input type='hidden' name='email' value='{escape(email)}'>
+        <button class='btn' type='submit'>Send the confirmation link again</button>
+      </form>"""
+
     body = f"""
     <div class='wrap'><div class='card'>
       {_mark()}
@@ -161,6 +172,7 @@ def login_page(
       <p class='sub'>Work the lead queue, review drafts, and run scans.
       Any email address works.</p>
       {_message(error, notice)}
+      {resend}
 
       <a class='btn btn-google' href='/auth/login'>{_GOOGLE_MARK} Continue with Google</a>
 
@@ -180,7 +192,8 @@ def login_page(
         <button class='btn btn-primary' type='submit'>Sign in</button>
       </form>
 
-      <div class='note'>No account yet? <a href='/signup'>Create one</a></div>
+      <div class='note'>No account yet? <a href='/signup'>Create one</a>
+      &nbsp;·&nbsp; <a href='/forgot'>Forgot password?</a></div>
       <div class='access'>{escape(_access_line(mode, domains))}</div>
     </div>
     <div class='foot'><a href='https://swandigitals.com'>swandigitals.com</a></div>
@@ -236,3 +249,80 @@ def signup_page(
     </div>
     """
     return _shell("Create your account", body)
+
+
+def forgot_page(error: str = "", notice: str = "", email: str = "") -> str:
+    body = f"""
+    <div class='wrap'><div class='card'>
+      {_mark()}
+      <h1>Reset your password</h1>
+      <p class='sub'>Enter the address on your account and we will email a link
+      to set a new password.</p>
+      {_message(error, notice)}
+
+      <form method='post' action='/auth/forgot'>
+        <div class='field'>
+          <label for='email'>Email</label>
+          <input id='email' name='email' type='email' autocomplete='username'
+                 required value='{escape(email)}' placeholder='you@example.com'>
+        </div>
+        <button class='btn btn-primary' type='submit'>Email me a link</button>
+      </form>
+
+      <div class='note'>Remembered it? <a href='/login'>Sign in</a></div>
+      <div class='access'>The link works once and expires in an hour. If no email
+      arrives, an admin can generate one for you.</div>
+    </div>
+    <div class='foot'><a href='https://swandigitals.com'>swandigitals.com</a></div>
+    </div>
+    """
+    return _shell("Reset your password", body)
+
+
+def reset_page(token: str, error: str = "") -> str:
+    from intentdesk.services.users import MIN_PASSWORD_LENGTH
+
+    body = f"""
+    <div class='wrap'><div class='card'>
+      {_mark()}
+      <h1>Choose a new password</h1>
+      <p class='sub'>This finishes the reset. The link you followed stops working
+      once you submit.</p>
+      {_message(error)}
+
+      <form method='post' action='/auth/reset'>
+        <input type='hidden' name='token' value='{escape(token)}'>
+        <div class='field'>
+          <label for='password'>New password</label>
+          <input id='password' name='password' type='password'
+                 autocomplete='new-password' required minlength='{MIN_PASSWORD_LENGTH}'
+                 placeholder='••••••••••••' autofocus>
+          <div class='hint'>At least {MIN_PASSWORD_LENGTH} characters. Length beats
+          symbols — a short phrase you will remember is stronger than P@ssw0rd1.</div>
+        </div>
+        <button class='btn btn-primary' type='submit'>Set new password</button>
+      </form>
+
+      <div class='note'><a href='/login'>Back to sign in</a></div>
+    </div>
+    <div class='foot'><a href='https://swandigitals.com'>swandigitals.com</a></div>
+    </div>
+    """
+    return _shell("Choose a new password", body)
+
+
+def outcome_page(title: str, message: str) -> str:
+    """A dead end that still looks like the product — used for expired, reused
+    and unrecognised links, which all render identically on purpose."""
+    body = f"""
+    <div class='wrap'><div class='card'>
+      {_mark()}
+      <h1>{escape(title)}</h1>
+      {_message(error=message)}
+      <div class='note'><a href='/forgot'>Request a new link</a>
+      &nbsp;·&nbsp; <a href='/login'>Back to sign in</a></div>
+    </div>
+    <div class='foot'><a href='https://swandigitals.com'>swandigitals.com</a></div>
+    </div>
+    """
+    return _shell(title, body)

@@ -86,6 +86,30 @@ def test_foreign_country_from_apollo_name_alone_is_caught():
 # ----------------------------------------------------- no invented constants
 
 
+def test_schema_lets_country_be_unknown():
+    """The schema was the deeper half of this bug.
+
+    001 declared `country TEXT NOT NULL DEFAULT 'IN'`, so the assumption was not
+    just in the resolver — the column could not represent "unknown", and the
+    first honest insert crashed with a NOT NULL violation. 009 drops both. A
+    later migration re-adding either would push the assumption back below the
+    code, where no amount of care in `resolving.py` can fix it.
+    """
+    import pathlib
+    import re
+
+    migrations = sorted(
+        (pathlib.Path(__file__).resolve().parent.parent / "migrations").glob("*.sql")
+    )
+    text = "\n".join(p.read_text() for p in migrations)
+    relaxed = text.index("ALTER COLUMN country DROP NOT NULL")
+    after = text[relaxed:]
+    assert not re.search(r"ALTER COLUMN country SET (NOT NULL|DEFAULT)", after), (
+        "a later migration re-imposes NOT NULL or a default on companies.country"
+    )
+    assert not re.search(r"country\s+TEXT\s+NOT NULL", after)
+
+
 def test_promotion_does_not_hardcode_a_country():
     """Reads the source, because the value is written in two places — the company
     row and the install signal — and fixing one and missing the other leaves the

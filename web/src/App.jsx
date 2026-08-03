@@ -54,6 +54,14 @@ const SOURCE_LABEL = {
   trustradius: "TrustRadius",
   softwaresuggest: "SoftwareSuggest",
   producthunt: "Product Hunt",
+  // Discovery sources. Without these the feed chip fell back to the raw
+  // collector name — `EVENTBRITE_ORGANISERS`, 21 monospace characters in a
+  // 104px column, which overflowed into the quote and broke the row grid.
+  // The label has to carry the platform because the source tabs use this same
+  // map, and three tabs all reading "Organisers" would be useless.
+  eventbrite_organisers: "Eventbrite organisers",
+  meraevents_organisers: "MeraEvents organisers",
+  townscript_organisers: "Townscript organisers",
 };
 
 const ageDays = (iso) =>

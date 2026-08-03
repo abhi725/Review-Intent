@@ -306,7 +306,14 @@ label.fact { display: block; cursor: text; }
 
 /* ----------------------------------------------------------------- feed */
 .feed { display: flex; flex-direction: column; }
-.feed-item { display: grid; grid-template-columns: 104px 1fr auto; gap: 14px; padding: 12px 15px; border-bottom: 1px solid var(--line); align-items: start; }
+.feed-item { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; gap: 14px; padding: 12px 15px; border-bottom: 1px solid var(--line); align-items: start; }
+/* The source chip sits in a fixed 104px column, so a long source name used to
+   push the grid out of shape rather than being clipped. Wrapping keeps it inside
+   its column whatever the name is — `anywhere` because collector names arrive as
+   one unbroken token and a future source is not obliged to be short. */
+.feed-item > .sig { white-space: normal; overflow-wrap: anywhere; text-align: center; justify-self: start; max-width: 100%; }
+/* A long unbroken company name or URL must not widen the row either. */
+.feed-item .who, .feed-item q { overflow-wrap: anywhere; }
 .feed-item:last-child { border-bottom: 0; }
 .feed-item q { color: var(--ink-2); font-size: 12.5px; display: block; margin-top: 3px; }
 .feed-item .who { font-weight: 600; font-size: 13px; }

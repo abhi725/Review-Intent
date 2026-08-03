@@ -61,7 +61,7 @@ _CSS = """
   --search:#14635c; --answer:#8a5d12; --generative:#8c3a50;
   --search-bg:#e6efed; --answer-bg:#f5eddd; --generative-bg:#f6e8ec;
   --ok:#2f6b3c; --warn:#8a5d12; --stop:#8c2f2f;
-  --measure:72ch;
+  --measure:820px;
   --gut:26px;
 }
 @media (prefers-color-scheme:dark){
@@ -125,7 +125,7 @@ body{
      whole column. Capping the *column* at the measure instead is what left a
      laptop with ~500px of empty screen while six-column tables scrolled inside a
      594px box — the wide content is what needs the width, not the paragraphs. */
-  .page{grid-template-columns:210px minmax(0,900px);gap:48px;
+  .page{grid-template-columns:210px minmax(0,var(--measure));gap:48px;
     padding-top:8px;justify-content:center}
   .rail{display:block}
 }
@@ -141,15 +141,16 @@ body{
    One rule, listing every text-level element, rather than a `.prose` wrapper class
    — the alternative is remembering to wrap, and the failure when you forget is a
    paragraph 900px wide, which is exactly the thing the measure exists to prevent. */
+/* Everything fills the column, prose included.
+   A narrower measure for running text is the typographic default and it was the
+   wrong call here: capping paragraphs at 72ch inside a 900px column put the text
+   hard left with roughly 300px of dead space to the right of every line, while
+   tables spanned the full width. On screen that reads as a broken layout, not as a
+   considered measure. The column itself is the constraint now — sized below to stay
+   comfortable to read — so nothing has a ragged empty gutter beside it. */
 main{min-width:0}
-/* Descendant selectors via :is(), not child selectors. The content sits inside
-   `details > .secbody` now, and a `main > p` rule silently stops matching the
-   moment anything is nested — the measure would vanish with nothing to show it. */
-main :is(p,ul,ol,h1,h3,h4,.lede,.qual,.eyebrow,.note){max-width:var(--measure)}
-/* Wide blocks deliberately take the full column: tables, the scoring formula,
-   the stat rows and the layered lists all carry structure that benefits from
-   width, and all of them were scrolling or wrapping badly inside the measure. */
-main :is(.scroll,.formula,.grid2,.layers,.card,.stat,.next){max-width:none}
+main :is(p,ul,ol,h1,h3,h4,.lede,.qual,.eyebrow,.note,.sb,
+         .scroll,.formula,.grid2,.layers,.card,.stat,.next){max-width:none}
 
 /* -------------------------------------------------------------- typography */
 h1,h2,h3,h4{
@@ -310,7 +311,7 @@ summary h2{grid-column:2;margin:0;padding:0;border-top:0;
   font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em;
   padding-top:7px;min-width:26px}
 .sb{grid-column:2;display:block;margin:5px 0 0;font-size:14.5px;line-height:1.5;
-  color:var(--muted);max-width:var(--measure)}
+  color:var(--muted)}
 .chev{grid-column:3;grid-row:1;width:9px;height:9px;margin-top:9px;
   border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
   transform:rotate(-45deg);transition:transform .18s ease}

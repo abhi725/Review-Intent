@@ -274,21 +274,23 @@ def test_work_pages_are_not_browser_cacheable():
     assert "noindex" in _WORK_HEADERS["X-Robots-Tag"]
 
 
-def test_prose_is_measured_but_wide_blocks_are_not():
-    """Capping the whole column at the reading measure left a laptop with ~500px
-    of empty screen while six-column tables scrolled inside a 594px box."""
+def test_content_fills_the_column_with_no_dead_gutter():
+    """A narrower measure for running text is the typographic default and it was
+    the wrong call here: capping paragraphs inside a wider column put prose hard
+    left with ~300px of dead space beside every line while tables spanned the full
+    width, which reads as a broken layout rather than a considered measure."""
     from intentdesk.api import work
 
     css = work._CSS
-    # Descendant :is(), not child selectors — the content is nested inside
-    # `details > .secbody` now, and `main > p` would silently stop matching.
-    assert "main :is(p,ul,ol" in css and "max-width:var(--measure)" in css
-    assert "main :is(.scroll,.formula" in css and "max-width:none" in css
-    assert "main > p," not in css, (
-        "a child selector cannot survive the accordion nesting"
+    # Nothing inside main is capped below the column any more.
+    assert "max-width:none" in css
+    assert "max-width:var(--measure)" not in css, (
+        "a cap narrower than the column is what produced the empty right side"
     )
-    # The column itself must be wider than the measure, or the breakout does nothing.
-    assert "minmax(0,900px)" in css
+    # The column itself is the constraint, and it is a length rather than a
+    # character count so it cannot drift with the font.
+    assert "--measure:820px" in css
+    assert "minmax(0,var(--measure))" in css
 
 
 # ------------------------------------------------- the accordion refactor

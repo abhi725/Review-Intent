@@ -262,3 +262,25 @@ def test_robots_disallows_the_write_up():
     from intentdesk.api.app import robots
 
     assert "Disallow: /work" in asyncio.run(robots()).body.decode()
+
+
+def test_work_pages_are_not_browser_cacheable():
+    """Without an explicit Cache-Control a browser applies heuristic freshness and
+    serves HTML it fetched minutes ago — which is how a deployed edit still looks
+    unchanged in the tab reading it."""
+    from intentdesk.api.app import _WORK_HEADERS
+
+    assert "no-cache" in _WORK_HEADERS["Cache-Control"]
+    assert "noindex" in _WORK_HEADERS["X-Robots-Tag"]
+
+
+def test_prose_is_measured_but_wide_blocks_are_not():
+    """Capping the whole column at the reading measure left a laptop with ~500px
+    of empty screen while six-column tables scrolled inside a 594px box."""
+    from intentdesk.api import work
+
+    css = work._CSS
+    assert "main > p," in css and "max-width:var(--measure)" in css
+    assert "main > .scroll," in css and "max-width:none" in css
+    # The column itself must be wider than the measure, or the breakout does nothing.
+    assert "minmax(0,900px)" in css

@@ -109,14 +109,15 @@ body{
 .top nav a[aria-current=page]{color:var(--ink);font-weight:600;background:var(--paper)}
 
 /* ------------------------------------------------------------------ layout */
-.page{max-width:1180px;margin:0 auto;padding:0 var(--gut) 90px;
+.page{max-width:1280px;margin:0 auto;padding:0 var(--gut) 90px;
   display:grid;grid-template-columns:minmax(0,1fr);gap:0}
 @media (min-width:1040px){
-  /* The rail is a fixed 210px and the column beside it is capped at the reading
-     measure, so `justify-content:center` is what stops the pair sitting hard left
-     with a wide dead margin on a large monitor. Without it the composition reads
-     as broken rather than as a deliberate narrow column. */
-  .page{grid-template-columns:210px minmax(0,var(--measure));gap:48px;
+  /* The content column is wider than the reading measure on purpose. Prose is
+     capped at `--measure` below; tables, the formula and the card grids take the
+     whole column. Capping the *column* at the measure instead is what left a
+     laptop with ~500px of empty screen while six-column tables scrolled inside a
+     594px box — the wide content is what needs the width, not the paragraphs. */
+  .page{grid-template-columns:210px minmax(0,900px);gap:48px;
     padding-top:8px;justify-content:center}
   .rail{display:block}
 }
@@ -128,7 +129,32 @@ body{
   padding:4px 0 4px 11px;border-left:2px solid var(--line-soft);line-height:1.4}
 .rail a:hover{color:var(--ink);border-left-color:var(--search)}
 
-main{min-width:0;max-width:var(--measure)}
+/* `main` fills its column; running text is what gets the measure, block by block.
+   One rule, listing every text-level element, rather than a `.prose` wrapper class
+   — the alternative is remembering to wrap, and the failure when you forget is a
+   paragraph 900px wide, which is exactly the thing the measure exists to prevent. */
+main{min-width:0}
+main > p,
+main > ul,
+main > ol,
+main > h1,
+main > h2,
+main > h3,
+main > h4,
+main > .lede,
+main > .qual,
+main > .eyebrow,
+main > .note{max-width:var(--measure)}
+/* Wide blocks deliberately take the full column: tables, the scoring formula,
+   the stat rows and the layered lists all carry structure that benefits from
+   width, and all of them were scrolling or wrapping badly inside the measure. */
+main > .scroll,
+main > .formula,
+main > .grid2,
+main > .layers,
+main > .card,
+main > .stat,
+main > .next{max-width:none}
 
 /* -------------------------------------------------------------- typography */
 h1,h2,h3,h4{

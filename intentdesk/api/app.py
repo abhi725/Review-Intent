@@ -133,6 +133,17 @@ async def app_shell():
     return FileResponse(index)
 
 
+# Sent with both write-up pages. Without an explicit Cache-Control a browser
+# applies its own heuristic freshness and will happily serve HTML it fetched
+# minutes ago — which is how an edit that is live on the server still looks
+# unchanged in the tab that is looking at it. `no-cache` still allows a 304, so
+# this costs a conditional request rather than a re-download.
+_WORK_HEADERS = {
+    "Cache-Control": "no-cache, must-revalidate",
+    "X-Robots-Tag": "noindex, nofollow",
+}
+
+
 @app.get("/work", response_class=HTMLResponse)
 @app.get("/work/visibility-agent", response_class=HTMLResponse)
 async def work_visibility_agent():
@@ -141,13 +152,13 @@ async def work_visibility_agent():
     Two routes on one handler: `/work` is what a person types or pastes, and
     landing them on a 404 to teach them a URL scheme is a poor greeting.
     """
-    return HTMLResponse(work.visibility_agent_page())
+    return HTMLResponse(work.visibility_agent_page(), headers=_WORK_HEADERS)
 
 
 @app.get("/work/growth-strategy", response_class=HTMLResponse)
 async def work_growth_strategy():
     """Part D of the Ticmint write-up."""
-    return HTMLResponse(work.growth_strategy_page())
+    return HTMLResponse(work.growth_strategy_page(), headers=_WORK_HEADERS)
 
 
 async def _public_leads_csv(token: str, cacheable: bool):

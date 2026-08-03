@@ -8,6 +8,7 @@ async def list_all(active_only: bool = False) -> list[dict]:
     return await db.fetch(
         """
         SELECT w.id, w.competitor, w.sources, w.active,
+               w.segment, w.trustpilot_url, w.g2_slug,
                COALESCE(c.companies, 0) AS install_base,
                COALESCE(n.negatives, 0) AS negatives_180d,
                COALESCE(l.leads, 0)     AS leads_produced
@@ -33,15 +34,44 @@ async def list_all(active_only: bool = False) -> list[dict]:
     )
 
 
-async def add(competitor: str, sources: list[str] | None = None) -> dict:
+async def add(
+    competitor: str,
+    sources: list[str] | None = None,
+    *,
+    segment: str | None = None,
+    trustpilot_url: str | None = None,
+    g2_slug: str | None = None,
+    active: bool = True,
+) -> dict:
+    """Add or update a tracked competitor.
+
+    `active` is a real parameter rather than always true: the Phase C expansion
+    brands are registered so their segment and slugs are recorded, but switching
+    them on multiplies what every paid run costs, so that is a separate decision.
+
+    The verified-page columns use COALESCE so an existing hand-entered URL is
+    never wiped by a re-seed that happens not to carry one — the same failure that
+    once erased a Tabbly agent prompt.
+    """
     return await db.fetchrow(
         """
-        INSERT INTO watchlist (competitor, sources) VALUES ($1, $2::jsonb)
-        ON CONFLICT (competitor) DO UPDATE SET sources = EXCLUDED.sources, active = true
+        INSERT INTO watchlist (competitor, sources, active, segment,
+                               trustpilot_url, g2_slug)
+        VALUES ($1, $2::jsonb, $3, $4, $5, $6)
+        ON CONFLICT (competitor) DO UPDATE SET
+            sources        = EXCLUDED.sources,
+            active         = EXCLUDED.active,
+            segment        = COALESCE(EXCLUDED.segment, watchlist.segment),
+            trustpilot_url = COALESCE(EXCLUDED.trustpilot_url, watchlist.trustpilot_url),
+            g2_slug        = COALESCE(EXCLUDED.g2_slug, watchlist.g2_slug)
         RETURNING *
         """,
         competitor,
         sources or DEFAULT_SOURCES,
+        active,
+        segment,
+        trustpilot_url,
+        g2_slug,
     )
 
 

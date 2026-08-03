@@ -47,6 +47,8 @@ def _published(entry: ET.Element) -> datetime:
 
 class VendorNewsCollector(Collector):
     name = "vendor_news"
+    cadence = "scheduled"   # free: Google News RSS, no key
+    cost_model = "free"
     kind = "vendor_news"
     requires = ()  # free: no key, no account
 
@@ -103,10 +105,18 @@ class VendorNewsCollector(Collector):
                     quote=title[:280],
                     raw_text=f"{title}\n\n{summary}\n\n{link}"[:4000],
                     vendor=competitor,
+                    url=link or None,
                     # News is about the vendor, never about one of its
                     # customers, so this stays unmatched on purpose.
                     company_name=None,
                     company_domain=None,
+                    # The competitor this item is about. `vendor` above does not
+                    # reach the signals table, so without this every news row
+                    # stored NULL and could not be grouped by competitor in the
+                    # feed — which is how seven of them ended up in an
+                    # unnameable bucket next to the G2 reviews.
+                    platform=competitor,
+                    source_site="google_news",
                 )
             )
 

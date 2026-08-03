@@ -8,7 +8,7 @@ changed and applied to signals already in the database.
 from datetime import datetime, timezone
 
 from intentdesk import db
-from intentdesk.collectors import RETIRED, availability, registry
+from intentdesk.collectors import PRICED_ACTION, RETIRED, availability, registry
 from intentdesk.services import (
     companies,
     leads,
@@ -16,6 +16,7 @@ from intentdesk.services import (
     preferences,
     scoring,
     signals,
+    spend,
 )
 
 
@@ -63,13 +64,23 @@ async def rescore_all() -> dict:
     return {"companies_scored": scored, "leads_created": created}
 
 
-async def run(competitor: str | None = None, free_only: bool = False) -> dict:
+async def run(
+    competitor: str | None = None,
+    free_only: bool = False,
+    sources: list[str] | None = None,
+    actor_email: str | None = None,
+) -> dict:
     """Full scan. Returns a summary honest enough to debug from.
 
     `free_only` runs the collectors that cost nothing. It exists because the
     first run of a new collector is also its first test, and being able to
     exercise the orchestration — matching, scoring, the queue rebuild — without
-    committing budget is what makes that test cheap to repeat.
+    committing budget is what makes that test cheap to repeat. **Every scheduled
+    entry point passes it**: paid work belongs on a click with the price on it,
+    not on a cron that bills quietly at 3am.
+
+    `sources` narrows the run to named collectors, which is what the per-source
+    buttons in the Sources panel post to. Omitted means all of them.
     """
     started = datetime.now(timezone.utc)
 
@@ -96,13 +107,34 @@ async def run(competitor: str | None = None, free_only: bool = False) -> dict:
     budget_exhausted = spent >= cap
 
     for coll in registry():
-        # `requires` is the honest proxy for "costs money": every paid provider
-        # here needs a token, and the two free collectors need none.
-        if free_only and coll.requires:
-            skipped.append({"collector": coll.name, "reason": "free-only run"})
+        if sources and coll.name not in sources:
             continue
 
-        if budget_exhausted and coll.requires:
+        # `cost_model`, not `requires`. The old test was "needs a credential",
+        # which is wrong in both directions: Reddit needs OAuth credentials and
+        # costs nothing, so a free-only run was skipping a free source, and any
+        # future paid source without a token would have slipped through as free.
+        paid = coll.cost_model != "free"
+
+        if free_only and paid:
+            skipped.append({
+                "collector": coll.name,
+                "reason": f"free-only run; {coll.name} bills {coll.cost_model}",
+            })
+            continue
+
+        # A paid collector on a scheduled cadence is a contradiction — it would
+        # mean unattended spending — so it is refused here rather than trusted to
+        # be configured correctly.
+        if paid and coll.cadence == "scheduled":
+            skipped.append({
+                "collector": coll.name,
+                "reason": (f"{coll.name} is marked scheduled but bills "
+                           f"{coll.cost_model}; paid collectors must be on_demand"),
+            })
+            continue
+
+        if budget_exhausted and paid:
             skipped.append({
                 "collector": coll.name,
                 "reason": f"monthly spend cap reached (${spent:.2f} of ${cap:.2f})",
@@ -150,28 +182,49 @@ async def run(competitor: str | None = None, free_only: bool = False) -> dict:
                     raw_text=r.raw_text, quote=r.quote,
                     weight=scoring.WEIGHTS.get(r.kind, 0),
                     matched_confidence=confidence,
+                    url=r.url, author=r.author,
+                    author_role=r.author_role, rating=r.rating,
+                    # Everything a collector now returns has to be forwarded
+                    # here explicitly. This call is the narrow point the whole
+                    # pipeline passes through: a field the collector sets and
+                    # this line forgets is silently dropped, and looks exactly
+                    # like a source that never supplied it.
+                    platform=r.platform or r.vendor or target,
+                    source_site=r.source_site or r.source,
+                    country=r.country, region=r.region,
+                    switched_from=r.switched_from,
+                    switched_reason=r.switched_reason,
+                    subscores=r.subscores,
                 )
                 if inserted:
                     new += 1
 
         cost = float(getattr(coll, "last_cost_usd", 0) or 0)
         if cost:
-            await db.execute(
-                """
-                INSERT INTO spend (day, provider, amount_usd)
-                VALUES (current_date, $1, $2)
-                ON CONFLICT (day, provider) DO UPDATE
-                    SET amount_usd = spend.amount_usd + EXCLUDED.amount_usd
-                """,
-                coll.name,
-                cost,
+            action = PRICED_ACTION.get(coll.name, f"collect_{coll.name}")
+            await spend.record(
+                coll.name, cost,
+                action=action,
+                units=max(got, 1),
+                estimated_usd=spend.estimate(action, max(got, 1))["estimated_usd"],
+                competitor=competitor,
+                actor_email=actor_email,
+                detail={"targets": targets, "found": got, "new": new},
             )
 
         collected += got
         stored += new
+        # A collector that declined every target is neither a success nor a
+        # failure, and reporting it as "found 0" makes a permanent refusal look
+        # like a quiet week. Trustpilot does this per brand.
+        skip_reason = getattr(coll, "last_skip_reason", None)
+        if skip_reason and got == 0:
+            skipped.append({"collector": coll.name, "reason": skip_reason})
+
         per_collector.append(
             {"collector": coll.name, "found": got, "new": new,
-             "cost_usd": round(cost, 4), "errors": errors}
+             "cost_usd": round(cost, 4), "errors": errors,
+             "declined": skip_reason}
         )
 
     rescore = await rescore_all()
@@ -180,6 +233,8 @@ async def run(competitor: str | None = None, free_only: bool = False) -> dict:
         "started_at": started.isoformat(),
         "seconds": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
         "competitors": targets,
+        "sources": sources or "all",
+        "free_only": free_only,
         "signals_found": collected,
         "signals_new": stored,
         "signals_unmatched": unmatched,
@@ -215,6 +270,13 @@ async def status() -> dict:
         "collectors": avail,
         "ready": sum(1 for a in avail if a["available"]),
         "total": len(avail),
+        # What the cron will actually touch. Shown because "scan ran" and "scan
+        # ran the source you care about" are different facts, and a paid source
+        # sitting off the schedule by design looks like a broken one otherwise.
+        "scheduled": [a["name"] for a in avail
+                      if a["cadence"] == "scheduled" and a["available"]],
+        "on_demand": [a["name"] for a in avail if a["cadence"] == "on_demand"],
+        "spend": await spend.month_to_date(),
         "retired": RETIRED,
         "last_scan": await db.fetchrow(
             """

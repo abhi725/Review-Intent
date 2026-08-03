@@ -57,11 +57,19 @@ def fake_db(monkeypatch):
 
 
 class StubCollector(Collector):
-    def __init__(self, name, *, requires=(), broken="", results=None, raises=None, cost=0.0):
+    # `cost_model` defaults to "per_run" here for the same reason the base class
+    # does: a collector that has not said it is free is assumed to bill, so a new
+    # paid source cannot slip onto the cron by omission. A stub that wants to be
+    # free has to say so, which is what `requires=()` used to imply and no longer
+    # does — Reddit needs credentials and costs nothing.
+    def __init__(self, name, *, requires=(), broken="", results=None, raises=None,
+                 cost=0.0, cost_model="per_run", cadence="on_demand"):
         self.name = name
         self.kind = "review"
         self.requires = requires
         self.known_broken = broken
+        self.cost_model = cost_model
+        self.cadence = cadence
         self._results = results or []
         self._raises = raises
         self.last_cost_usd = cost
@@ -113,7 +121,7 @@ def test_paid_collectors_are_skipped_once_the_cap_is_reached(fake_db, monkeypatc
                "FROM spend": 5.0})
     monkeypatch.setattr(
         scan, "registry",
-        lambda: [StubCollector("free_one", requires=()),
+        lambda: [StubCollector("free_one", requires=(), cost_model="free"),
                  StubCollector("paid_one", requires=("apify_token",))],
     )
     monkeypatch.setattr(scan.preferences, "all_prefs",

@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from intentdesk import db
 from intentdesk.services import companies, leads, signals, watchlist
 
-from intentdesk.market import COMPETITORS, RETIRED_COMPETITORS  # noqa: E402
+from intentdesk.market import BRANDS, COMPETITORS, RETIRED_COMPETITORS  # noqa: E402
 
 now = datetime.now(timezone.utc)
 
@@ -81,9 +81,28 @@ DEMO = [
 
 
 async def seed_watchlist():
-    for name, sources in COMPETITORS:
-        await watchlist.add(name, sources)
-    print(f"watchlist: {len(COMPETITORS)} competitors")
+    """Apply `market.BRANDS` to the watchlist, segments and verified slugs included.
+
+    The expansion brands land with `active = false`. They are registered so their
+    segment and any verified review page are on record, not switched on — turning
+    one on multiplies what every paid collection run costs, and that is a
+    deliberate decision rather than a side effect of re-seeding.
+    """
+    on = off = 0
+    for name, brand in BRANDS.items():
+        await watchlist.add(
+            name,
+            brand["sources"],
+            segment=brand.get("segment"),
+            trustpilot_url=brand.get("trustpilot_url"),
+            g2_slug=brand.get("g2_slug"),
+            active=bool(brand.get("active")),
+        )
+        on, off = (on + 1, off) if brand.get("active") else (on, off + 1)
+
+    verified = sum(1 for b in BRANDS.values() if b.get("trustpilot_url"))
+    print(f"watchlist: {len(BRANDS)} competitors ({on} active, {off} registered "
+          f"but off), {verified} with a hand-verified Trustpilot page")
 
 
 async def prune_watchlist():

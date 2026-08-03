@@ -36,6 +36,8 @@ COMPLAINT_TERMS = (
 
 class RedditCollector(Collector):
     name = "reddit"
+    cadence = "on_demand"   # free API, but rate-limited and slow
+    cost_model = "free"
     kind = "forum"
     requires = ("reddit_client_id", "reddit_client_secret")
 
@@ -87,6 +89,16 @@ class RedditCollector(Collector):
                             quote=(post.get("title") or "")[:280],
                             raw_text=text[:4000],
                             vendor=competitor,
+                            url=("https://reddit.com" + post["permalink"])
+                            if post.get("permalink") else post.get("url"),
+                            author=post.get("author"),
+                            author_role=f"r/{sub}",
+                            platform=competitor,
+                            source_site="reddit",
+                            # The subreddit, so the feed can show which community
+                            # a complaint came from and a low-yield one can be
+                            # dropped on evidence rather than on a hunch.
+                            region=f"r/{sub}",
                         )
                     )
 

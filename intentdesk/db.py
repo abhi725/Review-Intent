@@ -1,7 +1,8 @@
 """asyncpg pool. Kept deliberately thin — no ORM, this VM is short on RAM."""
 
 import json
-from typing import Any, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Optional
 
 import asyncpg
 
@@ -60,3 +61,18 @@ async def fetchval(sql: str, *args: Any) -> Any:
 
 async def execute(sql: str, *args: Any) -> str:
     return await pool().execute(sql, *args)
+
+
+@asynccontextmanager
+async def transaction() -> AsyncIterator[asyncpg.Connection]:
+    """Several statements that must land together, on one connection.
+
+    The helpers above each take a connection from the pool independently, so a
+    read followed by a write through them can interleave with another request.
+    Redeeming a single-use token is exactly that read-then-write, and two
+    simultaneous clicks on the same link must not both succeed — hence a real
+    transaction with the row locked.
+    """
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            yield conn

@@ -109,19 +109,56 @@ class G2ReviewCollector(Collector):
                 continue
 
             text = item.get("reviewText") or ""
+
+            # G2's own dimension scores. Kept only where the actor supplied one,
+            # so an absent dimension stays absent rather than becoming a zero
+            # that scoring would read as "rated terrible".
+            subscores = {
+                k: item[k]
+                for k in ("easeOfUse", "easeOfSetup", "easeOfAdmin",
+                          "qualityOfSupport", "meetsRequirements", "nps")
+                if item.get(k) is not None
+            }
+
             out.append(
                 RawSignal(
                     kind="review",
+                    # Stays "g2", not the collector's own name: dedup is on
+                    # (source, source_id), so renaming it would re-insert every
+                    # review already stored.
                     source="g2",
                     source_id=f"g2:{item.get('reviewId')}",
                     observed_at=when,
                     quote=(item.get("title") or text)[:280],
                     raw_text=text[:4000],
                     vendor=competitor,
-                    # G2 exposes no company or domain, so this stays unmatched
-                    # unless the reviewer happens to name their employer.
+                    # G2 publishes no employer and no domain — `companySegment`
+                    # is a size bucket and `industry` a taxonomy id, neither of
+                    # which identifies a company. Verified across 50 records.
+                    # A review stays unmatched unless the text names an employer
+                    # outright, which `drafting.analyse` extracts separately.
                     company_name=None,
                     company_domain=None,
+                    # `reviewLink` does not exist in this payload; `url` does.
+                    url=item.get("url"),
+                    author=item.get("reviewerName"),
+                    # Deliberately None: the actor returns no job title at all.
+                    # It previously read `reviewerJobTitle`/`reviewerRole`, so
+                    # author_role was NULL on every row ever stored while
+                    # looking like a field that was merely often empty.
+                    author_role=None,
+                    rating=float(stars),
+                    platform=item.get("productName") or competitor,
+                    source_site="g2",
+                    country=item.get("country"),
+                    region=item.get("region"),
+                    # "yes" plus a reason is a reviewer telling you in writing
+                    # that they churned off a platform.
+                    switched_from=(item.get("switchedFromOtherProduct")
+                                   if item.get("switchedFromOtherProduct") not in (None, "no")
+                                   else None),
+                    switched_reason=item.get("switchedReason"),
+                    subscores=subscores or None,
                 )
             )
 
@@ -198,6 +235,13 @@ class CapterraReviewCollector(Collector):
                     quote=str(text)[:280],
                     raw_text=str(text)[:4000],
                     vendor=competitor,
+                    url=item.get("url") or item.get("reviewLink"),
+                    author=item.get("reviewerName") or item.get("author"),
+                    author_role=item.get("reviewerJobTitle") or item.get("jobTitle"),
+                    # Read at the top of this loop to decide whether the review
+                    # is negative enough to keep. Storing it too is what lets the
+                    # feed show a 1-star and a 2.5-star differently.
+                    rating=rating,
                 )
             )
 

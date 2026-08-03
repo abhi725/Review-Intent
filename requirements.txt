@@ -12,3 +12,10 @@ authlib==1.4.0
 mcp==1.12.4
 openai>=1.60
 anthropic>=0.69
+# Avatar uploads arrive as multipart; FastAPI refuses to parse them without it.
+python-multipart==0.0.20
+# Avatars are re-encoded rather than stored as uploaded — strips EXIF, defeats
+# polyglot files. See services/avatars.py.
+Pillow==11.1.0
+# The .xlsx half of the queue export.
+openpyxl==3.1.5

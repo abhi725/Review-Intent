@@ -106,5 +106,14 @@ def test_capterra_is_never_reported_ready():
 
 
 def test_retired_sources_carry_a_reason():
-    assert {r["name"] for r in RETIRED} >= {"builtwith", "trustpilot"}
+    assert {r["name"] for r in RETIRED} >= {"builtwith", "gmb_reviews", "linkedin_jobs"}
     assert all(r["reason"] for r in RETIRED)
+
+
+def test_trustpilot_left_retirement_when_it_was_built():
+    """It was retired as "wrong audience" and that turned out to be a property of
+    the brand, not the site. A source cannot be both retired and registered — the
+    Sources panel reads both lists and would show it twice, saying opposite things."""
+    names = {r["name"] for r in RETIRED}
+    assert "trustpilot" not in names
+    assert "trustpilot" in {c.name for c in registry()}

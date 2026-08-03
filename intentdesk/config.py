@@ -27,6 +27,22 @@ class Settings(BaseSettings):
     # setting wins after that, so changing access does not need a redeploy.
     access_mode: str = "open"
 
+    # --- outbound mail ---
+    # Absolute base for links we email. Deliberately not derived from the
+    # request's Host header: an attacker who can set that header could otherwise
+    # get a password-reset link pointed at their own domain.
+    public_base_url: str = "http://localhost:8100"
+    mautic_url: str = ""
+    mautic_user: str = ""
+    mautic_pass: str = ""
+    mautic_tpl_verify: int = 0
+    mautic_tpl_reset: int = 0
+    # Fallback sender, used whenever Mautic is unreachable or refuses. Keeping
+    # both configured is not redundancy for its own sake — Mautic's API auth has
+    # broken before without anyone noticing, because mail kept arriving.
+    resend_api_key: str = ""
+    email_from: str = "Intent Desk <noreply@updates.swandigitals.com>"
+
     target_country: str = "IN"
     target_agents_min: int = 5
     target_agents_max: int = 200

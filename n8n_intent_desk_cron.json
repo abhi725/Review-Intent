@@ -1,0 +1,272 @@
+{
+  "id": "intentdeskweekly01",
+  "name": "Intent Desk — weekly free pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1],
+              "triggerAtHour": 3,
+              "triggerAtMinute": 15
+            }
+          ]
+        }
+      },
+      "id": "trigger-weekly",
+      "name": "Monday 03:15 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-360, 300],
+      "notes": "Weekly, not daily. The Apify account is a $5/month free plan and the digest is a weekly read; a nightly run would multiply noise without multiplying signal."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "scan",
+      "name": "1. Scan (free collectors only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-140, 300],
+      "notes": "There is deliberately no free_only parameter to set. The endpoint forces it: paid collection belongs on a button with its price on it, not on a cron that bills at 3am. Passing free_only=false here does nothing."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/classify",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "50" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "classify",
+      "name": "2. Classify complaints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [80, 300],
+      "notes": "MUST run before drafting, and this is the node most likely to be moved by someone tidying the flow. Every draft is written about the complaint pattern for the platform a company runs, and that pattern is computed from the columns this step fills. Put it after drafting and each week's drafts are written from the previous week's evidence — which still produces plausible output, so nothing would look broken."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/enrich",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "25" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "enrich",
+      "name": "3. Enrich companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 300],
+      "notes": "Apollo organizations/enrich, which works on the free plan. This is company enrichment, not the paid people/match — that one is per-row and admin-only, and never runs here."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/draft",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "10" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "draft",
+      "name": "4. Draft outreach",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "notes": "Billed in LLM tokens. Ten at a time on purpose: drafts are meant to be read before they are sent, and a hundred unread drafts is the same as none. The response carries generic_pitch — true means nobody has replaced the placeholder value proposition and every draft this week inherited it."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://intent.swandigitals.com/cron/reconcile",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "reconcile",
+      "name": "5. Reconcile Apify spend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 300],
+      "notes": "Compares what we recorded against Apify's own monthly figure. Our number is what the spend cap reads, so a drift between the two means the cap is guarding the wrong total."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://intent.swandigitals.com/cron/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "alerts",
+      "name": "6. Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 220],
+      "notes": "Catches the two failures the queue cannot show you: a collector that stopped returning, and a cron that stopped firing. Empty response means healthy."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://intent.swandigitals.com/cron/digest",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "days", "value": "7" },
+            { "name": "fmt", "value": "text" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_MCP_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": { "neverError": true, "fullResponse": false }
+          }
+        }
+      },
+      "id": "digest",
+      "name": "7. Weekly digest (text)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 380],
+      "notes": "Plain text, ready to paste into email or WhatsApp. Add a send node after this one — it is left unwired because where the digest should go is a decision, not a default."
+    }
+  ],
+  "connections": {
+    "Monday 03:15 IST": {
+      "main": [[{ "node": "1. Scan (free collectors only)", "type": "main", "index": 0 }]]
+    },
+    "1. Scan (free collectors only)": {
+      "main": [[{ "node": "2. Classify complaints", "type": "main", "index": 0 }]]
+    },
+    "2. Classify complaints": {
+      "main": [[{ "node": "3. Enrich companies", "type": "main", "index": 0 }]]
+    },
+    "3. Enrich companies": {
+      "main": [[{ "node": "4. Draft outreach", "type": "main", "index": 0 }]]
+    },
+    "4. Draft outreach": {
+      "main": [[{ "node": "5. Reconcile Apify spend", "type": "main", "index": 0 }]]
+    },
+    "5. Reconcile Apify spend": {
+      "main": [
+        [
+          { "node": "6. Alerts", "type": "main", "index": 0 },
+          { "node": "7. Weekly digest (text)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "active": false,
+  "meta": {
+    "notes": "Every step here is free or LLM-token-billed. No node in this workflow can trigger a paid collector: /cron/scan forces free_only server-side, and the paid paths (Trustpilot, G2, Apollo people/match) are admin-only POSTs to /api/* that require a browser session. That separation is the point — free work on a schedule, paid work on a click. Set the Authorization header on all seven HTTP nodes to `Bearer <MCP_BEARER_TOKEN>` from .env.prod before activating."
+  }
+}

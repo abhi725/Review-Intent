@@ -7,9 +7,16 @@
   --ink-3: #7c929b;
   --line: #dce4e7;
   --line-strong: #c4d1d5;
-  --accent: #0b6e7b;
-  --accent-soft: #e0f0f1;
+  /* Brand accent, matching the marketing site's swan-orange family.
+     Not the literal #f97316: that sits at ~2.9:1 against white, so as a button
+     fill with white label text it fails AA outright. #c2410c is the same hue
+     at ~4.9:1, which passes for normal text. The bright swan-orange is kept
+     below as --brand for large, non-text-critical accents. */
+  --accent: #c2410c;
+  --accent-soft: #fff1e7;
   --on-accent: #ffffff;
+  --brand: #f97316;
+  --brand-2: #ec4899;
   --hot: #af3d28;
   --hot-soft: #fae8e3;
   --warm: #8c6714;
@@ -21,7 +28,7 @@
   --shadow: 0 1px 2px rgba(14, 32, 41, 0.06), 0 8px 24px -12px rgba(14, 32, 41, 0.18);
 
   --font-display: ui-serif, Georgia, "Times New Roman", serif;
-  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -35,9 +42,13 @@
     --ink-3: #6c858f;
     --line: #21373e;
     --line-strong: #2e4a53;
-    --accent: #45b2c0;
-    --accent-soft: #113137;
-    --on-accent: #06181c;
+    /* On a dark surface the relationship inverts: a light orange carries the
+       text contrast and the label on top of it goes dark. */
+    --accent: #fb923c;
+    --accent-soft: #3a1e0c;
+    --on-accent: #1a0d04;
+    --brand: #fb923c;
+    --brand-2: #f472b6;
     --hot: #e58b73;
     --hot-soft: #371d16;
     --warm: #d9b061;
@@ -54,7 +65,8 @@
   --paper: #eff3f4; --surface: #ffffff; --surface-2: #f7fafa;
   --ink: #0e2029; --ink-2: #47606c; --ink-3: #7c929b;
   --line: #dce4e7; --line-strong: #c4d1d5;
-  --accent: #0b6e7b; --accent-soft: #e0f0f1; --on-accent: #ffffff;
+  --accent: #c2410c; --accent-soft: #fff1e7; --on-accent: #ffffff;
+  --brand: #f97316; --brand-2: #ec4899;
   --hot: #af3d28; --hot-soft: #fae8e3;
   --warm: #8c6714; --warm-soft: #f8efda;
   --cool: #55707e; --cool-soft: #e8eef1;
@@ -65,7 +77,8 @@
   --paper: #0a1418; --surface: #101e24; --surface-2: #15262d;
   --ink: #e4eef0; --ink-2: #9bb2ba; --ink-3: #6c858f;
   --line: #21373e; --line-strong: #2e4a53;
-  --accent: #45b2c0; --accent-soft: #113137; --on-accent: #06181c;
+  --accent: #fb923c; --accent-soft: #3a1e0c; --on-accent: #1a0d04;
+  --brand: #fb923c; --brand-2: #f472b6;
   --hot: #e58b73; --hot-soft: #371d16;
   --warm: #d9b061; --warm-soft: #2f2510;
   --cool: #8aa5b0; --cool-soft: #1a2c33;
@@ -313,6 +326,10 @@ label.fact { display: block; cursor: text; }
   .nav .count { display: none; }
   .rail-foot { margin-top: 0; }
   .spend { display: none; }
+  /* The rail is a horizontal bar at the top here, so the account menu has to
+     drop down again — upward would put it above the viewport. */
+  .menu-up { top: calc(100% + 6px); bottom: auto; }
+  .who-name { max-width: 120px; }
   .topbar, .workspace { padding-left: 14px; padding-right: 14px; }
   .kpis { margin-left: 14px; margin-right: 14px; }
 }
@@ -335,3 +352,327 @@ label.fact { display: block; cursor: text; }
 .alert-warning  { background: var(--warm-soft); color: var(--warm); border-color: var(--warm); }
 
 .detail-body .alert { margin: 0; }
+
+/* ------------------------------------------------------------- avatars */
+.avatar { border-radius: 50%; object-fit: cover; flex: 0 0 auto; display: block; }
+.avatar-initials {
+  display: grid; place-items: center; font-weight: 600; letter-spacing: .02em;
+  /* Hue comes from the address, so an account without a photo still reads as
+     a specific person rather than a grey placeholder. */
+  background: hsl(var(--hue) 42% 88%); color: hsl(var(--hue) 55% 26%);
+}
+@media (prefers-color-scheme: dark) {
+  .avatar-initials { background: hsl(var(--hue) 30% 22%); color: hsl(var(--hue) 55% 78%); }
+}
+:root[data-theme="dark"] .avatar-initials {
+  background: hsl(var(--hue) 30% 22%); color: hsl(var(--hue) 55% 78%);
+}
+:root[data-theme="light"] .avatar-initials {
+  background: hsl(var(--hue) 42% 88%); color: hsl(var(--hue) 55% 26%);
+}
+
+.who-btn {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); color: inherit; cursor: pointer; text-align: left;
+  font: inherit; font-size: 12.5px;
+}
+.who-btn:hover { border-color: var(--accent); }
+.who-btn[aria-current="true"] { border-color: var(--accent); color: var(--accent); }
+.who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.who-caret { color: var(--ink-3); font-size: 10px; flex: 0 0 auto; }
+
+/* -------------------------------------------------------- export menu */
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 210px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: var(--shadow); padding: 5px; display: grid; gap: 2px;
+}
+/* Anchored to the bottom of the rail, so it has to grow upward — downward it
+   would open off the bottom of the viewport. */
+.menu-up { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; min-width: 100%; }
+
+.menu a, .menu button {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; text-align: left;
+  background: none; text-decoration: none; color: inherit; font: inherit; font-size: 13px;
+  cursor: pointer;
+}
+.menu a:hover, .menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.menu a small, .menu button small {
+  color: var(--ink-3); font-size: 11px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; max-width: 130px;
+}
+.menu a.danger:hover { background: var(--hot-soft); color: var(--hot); }
+.menu a.danger:hover small { color: var(--hot); }
+
+.menu-head { padding: 8px 10px 9px; border-bottom: 1px solid var(--line); margin-bottom: 3px; }
+.menu-name { font-size: 13px; font-weight: 600; }
+.menu-email {
+  font-size: 11px; color: var(--ink-3); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.menu-head .pill { display: inline-block; margin-top: 6px; }
+
+/* ------------------------------------------------------- signal counts */
+.counts { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.count-tile {
+  flex: 1 1 130px; display: grid; gap: 1px; padding: 10px 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  cursor: pointer; color: inherit; font: inherit;
+}
+.count-tile:hover { border-color: var(--accent); }
+.count-tile.on { border-color: var(--accent); background: var(--accent-soft); }
+.count-tile b { font-family: var(--font-mono); font-size: 19px; font-variant-numeric: tabular-nums; }
+.count-tile span { font-size: 12px; font-weight: 500; }
+.count-tile small { font-size: 10.5px; color: var(--ink-3); }
+.counts-note {
+  flex: 0 0 auto; align-self: center; padding-left: 4px;
+  font-size: 11px; color: var(--ink-3);
+}
+
+/* ------------------------------------------------- signal row detail */
+.stars { margin-left: 8px; color: var(--warm); font-size: 12px; letter-spacing: 1px; }
+.stars small { margin-left: 5px; color: var(--ink-3); font-family: var(--font-mono); letter-spacing: 0; }
+
+.link-btn {
+  background: none; border: 0; padding: 0; margin-top: 6px; cursor: pointer;
+  color: var(--accent); font: inherit; font-size: 11.5px; text-decoration: underline;
+}
+.feed-item.open { background: var(--surface-2); }
+.sig-detail { margin-top: 9px; border-left: 2px solid var(--line-strong); padding-left: 11px; }
+.sig-detail dl {
+  display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px;
+  margin: 0 0 8px; font-size: 12px;
+}
+.sig-detail dt { color: var(--ink-3); }
+.sig-detail dd { margin: 0; }
+.sig-detail dd em { color: var(--ink-3); font-style: normal; }
+.sig-detail a { color: var(--accent); }
+.sig-full {
+  margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+  white-space: pre-wrap; max-height: 260px; overflow-y: auto;
+}
+
+/* -------------------------------------------------------------- profile */
+.profile-head { display: flex; gap: 18px; align-items: flex-start; padding: 16px 15px; }
+.profile-email { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.profile-how { margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.profile-actions { display: flex; gap: 8px; margin-top: 11px; }
+/* The upload control is a <label> wrapping a hidden input, so it needs the
+   button's own centring rather than inheriting it. */
+.profile-actions .btn { display: inline-flex; align-items: center; cursor: pointer; }
+
+.pill {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+  padding: 2px 7px; border-radius: 99px; border: 1px solid transparent;
+}
+.pill.ok { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.pill.warn { background: var(--warm-soft); color: var(--warm); border-color: var(--warm); }
+
+.stale { padding: 18px 15px; max-width: 560px; }
+.stale p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+.stale .btn { display: inline-flex; margin-top: 4px; }
+
+.form-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; padding: 4px 15px 0;
+}
+.form-grid label { display: grid; gap: 5px; font-size: 12px; color: var(--ink-3); }
+.form-grid input {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface-2); color: var(--ink); font: inherit; font-size: 13px;
+}
+.form-grid input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.row-actions { display: flex; gap: 8px; padding: 13px 15px; }
+.profile-head .hint, .panel > .hint { font-size: 11.5px; color: var(--ink-3); margin-top: 8px; }
+.panel > .hint { padding: 9px 15px 0; }
+.panel > .hint a { color: var(--accent); }
+
+/* ---------------------------------------------- signal feed selector
+   Competitor → review site → filters. Three levels, so the eye can go
+   straight to "which competitor, complained about where". */
+.panel.selector { padding: 0; margin-bottom: 14px; }
+
+.sel-row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px 10px; padding: 12px 15px;
+}
+.sel-row label {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.sel-row select {
+  font: inherit; font-size: 12.5px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 9px; max-width: 200px;
+}
+.sel-row select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.sel-row label.check {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-ui); font-size: 12.5px; letter-spacing: 0;
+  text-transform: none; color: var(--ink-2); cursor: pointer;
+}
+.sel-row label.check input { accent-color: var(--accent); }
+
+/* Source tabs. Every registered collector appears even when it has returned
+   nothing, carrying the reason — an empty tab that cannot explain itself is
+   indistinguishable from a broken scraper. */
+.source-tabs {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 15px 12px; border-top: 1px solid var(--line); padding-top: 12px;
+}
+.src-tab {
+  display: flex; align-items: baseline; gap: 7px;
+  font: inherit; font-size: 12.5px; color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.src-tab:hover { border-color: var(--line-strong); color: var(--ink); }
+.src-tab small {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.src-tab.on {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+}
+.src-tab.on small { color: var(--on-accent); opacity: 0.75; }
+/* State is carried by a left rule as well as colour, so it survives
+   greyscale and colour-blindness. */
+.src-tab.warn { border-left: 3px solid var(--warm); }
+.src-tab.bad  { border-left: 3px solid var(--hot); }
+.src-tab.off  { opacity: 0.6; border-style: dashed; }
+
+/* ------------------------------------------------------ signal rows */
+.sig-line {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+  margin-bottom: 3px;
+}
+.sig-line .platform {
+  font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em;
+}
+.badge {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-3);
+}
+.badge.muted { background: var(--surface-2); }
+.badge.cat { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+/* Someone stating in writing that they left a platform. The one badge worth
+   spending brand colour on. */
+.badge.switched {
+  background: var(--brand); color: #1a0d04;
+  border-color: transparent; font-weight: 600;
+}
+.complaint {
+  margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+}
+.subscores { display: flex; flex-wrap: wrap; gap: 5px; }
+.subscore {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-3);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 5px; padding: 2px 6px;
+}
+.subscore b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------- Phase B2: paid actions and spend
+   Everything here labels or refuses a cost. The visual rule is that a priced
+   control never looks like a free one: `.btn-pay` carries the accent border and
+   the price sits beside it, so nothing bills on a click that read as harmless. */
+
+.stack { display: grid; gap: 14px; }
+.row { display: flex; align-items: center; }
+.row.gap { gap: 8px; padding: 13px 15px; }
+.grow { flex: 1; }
+
+.btn-pay { border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.btn-pay:hover:not(:disabled) { background: var(--accent-soft); }
+/* A disabled paid button is the commonest state on this screen — a refused tier,
+   a missing slug, a spent cap — so it has to read as "deliberately off" rather
+   than "still loading". */
+.btn-pay:disabled { border-color: var(--line); color: var(--ink-3); }
+
+.price {
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.price small { color: var(--ink-3); }
+
+.badge.ok { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.badge.pay { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.badge.warn { background: var(--warm-soft); color: var(--warm); border-color: transparent; }
+.badge.danger { background: var(--hot-soft); color: var(--hot); border-color: transparent; }
+/* The three identity tiers. `low` is muted rather than red: it is a correct
+   outcome, not a fault — most reviewers cannot be identified from a display name
+   and that is the honest answer. */
+.badge.tier-high { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.badge.tier-medium { background: var(--warm-soft); color: var(--warm); border-color: transparent; }
+.badge.tier-low { background: var(--surface-2); color: var(--ink-3); }
+
+.note { margin: 0; padding: 9px 15px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+.error.inline { margin: 0; padding: 8px 0; font-size: 12px; }
+
+/* -------------------------------------------------------------- spend meter */
+.spend-wide { display: grid; gap: 8px; padding: 13px 15px; }
+.spend-figure { display: flex; align-items: baseline; gap: 6px; }
+.spend-figure b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.spend-figure small { color: var(--ink-3); }
+.meter.big { height: 8px; border-radius: 4px; }
+.meter i.warn { background: var(--warm); }
+.meter i.over { background: var(--hot); }
+
+/* ------------------------------------------------------------- source rows */
+.source-list { display: grid; }
+.source-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) auto;
+  gap: 12px; align-items: center;
+  padding: 11px 15px; border-top: 1px solid var(--line);
+}
+.source-row.off { background: var(--surface-2); }
+.source-id { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.source-why { font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+.source-act { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+
+@media (max-width: 860px) {
+  /* Stacked rather than scrolled: the refusal text is the most important thing
+     in the row and a horizontal scrollbar is where it would go to hide. */
+  .source-row { grid-template-columns: 1fr; }
+  .source-act { justify-content: flex-start; }
+}
+
+.inline-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+.inline-field select {
+  font: inherit; font-size: 12px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 8px;
+}
+
+.reasons { margin: 0; padding: 4px 15px 14px 32px; font-size: 12px; color: var(--ink-2); }
+.reasons li { margin: 6px 0; line-height: 1.5; }
+.reasons b { color: var(--ink); }
+
+/* ------------------------------------------------- per-row signal controls */
+.sig-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line);
+}
+.sig-actions .note, .sig-actions .refusal { flex-basis: 100%; padding: 0; }
+.refusal {
+  font-size: 12px; color: var(--ink-2); line-height: 1.45;
+  border-left: 2px solid var(--line-strong); padding-left: 8px;
+}
+
+/* --------------------------------------------------------- spend breakdown */
+table.grid.tight { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.grid.tight th, table.grid.tight td {
+  text-align: left; padding: 7px 15px; border-top: 1px solid var(--line);
+}
+table.grid.tight th { color: var(--ink-3); font-weight: 500; }
+table.grid.tight td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.form-grid select {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px;
+}

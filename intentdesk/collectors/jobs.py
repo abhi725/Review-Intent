@@ -183,6 +183,9 @@ class JobPostCollector(Collector):
                         company_domain=_employer_domain(item),
                         city=_first(item, "location", "city"),
                         vendor=competitor,
+                        # The posting itself. Without it the feed can say a
+                        # company is hiring support staff but not show the ad.
+                        url=_first(item, "url", "jobUrl", "link"),
                     )
                 )
 

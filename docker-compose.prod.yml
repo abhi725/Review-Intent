@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.1.0
+    image: swan-intent-api:0.7.0
     container_name: swan-intent-api
     restart: unless-stopped
     environment:
@@ -33,6 +33,22 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
       APIFY_TOKEN: ${APIFY_TOKEN:-}
+      # --- outbound mail ---
+      # `:?` rather than a default, deliberately. Every verification and
+      # password-reset link is built from this; the config default is
+      # http://localhost:8100, so a missing value here would send real people
+      # links to their own laptop while everything still returned 200. Better
+      # that the deploy refuses to start.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env.prod}
+      MAUTIC_URL: ${MAUTIC_URL:-}
+      MAUTIC_USER: ${MAUTIC_USER:-}
+      MAUTIC_PASS: ${MAUTIC_PASS:-}
+      MAUTIC_TPL_VERIFY: ${MAUTIC_TPL_VERIFY:-0}
+      MAUTIC_TPL_RESET: ${MAUTIC_TPL_RESET:-0}
+      # The floor under Mautic. Keep it set: Mautic's API auth has broken
+      # before without anyone noticing, because mail kept arriving this way.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Intent Desk <noreply@updates.swandigitals.com>}
     networks:
       - coolify            # so Traefik can reach it
       - intentdb           # so it can reach Postgres

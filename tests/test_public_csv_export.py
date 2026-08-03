@@ -333,7 +333,10 @@ def test_every_section_carries_its_finding_not_just_a_title(render):
     from intentdesk.api import work
 
     html = getattr(work, render)()
-    blurbs = re.findall(r'<p class="sb">(.*?)</p>', html, re.S)
+    # A <span>, not a <p>: `summary` takes phrasing content, and an invalid <p>
+    # there leaves the disclosure behaviour to browser error recovery.
+    blurbs = re.findall(r'<span class="sb">(.*?)</span>', html, re.S)
+    assert '<p class="sb">' not in html
     assert len(blurbs) == html.count('<details class="sec"')
     for b in blurbs:
         assert len(b) > 45, f"blurb too thin to carry a finding: {b!r}"
@@ -363,3 +366,15 @@ def test_closed_sections_open_themselves_when_needed(render):
     assert "beforeprint" in html
     assert "hashchange" in html
     assert 'id="toggle-all"' in html
+
+
+def test_pages_carry_a_visible_build_stamp():
+    """Three rounds of "it is not working" began with the server serving the fix
+    and a browser showing a copy cached before there was a Cache-Control header.
+    A visible stamp makes "which copy am I looking at" answerable at a glance."""
+    from intentdesk.api import work
+
+    for render in ("visibility_agent_page", "growth_strategy_page"):
+        html = getattr(work, render)()
+        assert 'class="build">build ' in html
+        assert work.BUILD in html

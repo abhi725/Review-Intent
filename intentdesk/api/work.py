@@ -32,8 +32,14 @@ turn up in a search for the company.
 """
 
 import re
-
+from datetime import datetime, timezone
 from html import escape
+
+# Stamped at import, so it names the container that is answering. Three rounds of
+# "it is not working" began with the server serving the fix and the browser showing
+# a copy it had cached before there was a Cache-Control header — with no way for
+# either side to tell which. One glance at the footer answers it now.
+BUILD = datetime.now(timezone.utc).strftime("%d %b %H:%M UTC")
 
 # Kept as reference rather than interpolated into the CSS. The CSS below declares
 # these as custom properties, which is the actual token system; duplicating them
@@ -294,7 +300,7 @@ summary h2{grid-column:2;margin:0;padding:0;border-top:0;
 .sc{grid-column:1;grid-row:1/span 2;font-family:ui-monospace,Menlo,monospace;
   font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em;
   padding-top:7px;min-width:26px}
-.sb{grid-column:2;margin:5px 0 0;font-size:14.5px;line-height:1.5;
+.sb{grid-column:2;display:block;margin:5px 0 0;font-size:14.5px;line-height:1.5;
   color:var(--muted);max-width:var(--measure)}
 .chev{grid-column:3;grid-row:1;width:9px;height:9px;margin-top:9px;
   border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
@@ -311,6 +317,9 @@ details[open] > summary h2{color:var(--ink)}
   border-radius:7px;padding:7px 14px}
 #toggle-all:hover{border-color:var(--search);color:var(--search)}
 .allbar span{font-size:13px;color:var(--muted)}
+.build{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+  padding:2px 7px;border-radius:5px;background:var(--search-bg);
+  color:var(--search);font-weight:650}
 
 /* ------------------------------------------------------------ small screens */
 /* Written as a max-width block rather than by lowering the base, because the
@@ -390,7 +399,11 @@ def _accordion(body: str, blurbs: dict, code: str) -> tuple[str, str]:
             f'<summary>'
             f'<span class="sc">{code}{n}</span>'
             f'<h2 id="{sid}">{title}</h2>'
-            + (f'<p class="sb">{blurb}</p>' if blurb else "")
+            # A <span>, not a <p>. `summary` takes phrasing content (or a single
+            # heading element), so a <p> in there is invalid and leaves the
+            # disclosure behaviour to each browser's error recovery — not
+            # something to gamble a submission on.
+            + (f'<span class="sb">{blurb}</span>' if blurb else "")
             + '<span class="chev" aria-hidden="true"></span>'
             f'</summary><div class="secbody">{chunk}</div></details>'
         )
@@ -459,6 +472,7 @@ def _shell(*, title: str, description: str, current: str, rail: str,
   <main>{body}</main>
 </div>
 <footer class="foot">
+  <span class="build">build {BUILD}</span> &middot;
   Written for the Ticmint exercise. Every factual claim about the live site or the
   live agent is chipped <span class="chip measured">measured</span>; judgement is
   chipped <span class="chip reasoned">reasoned</span>. Part E (proof of work) is

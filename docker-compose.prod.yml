@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.14.0
+    image: swan-intent-api:0.14.1
     container_name: swan-intent-api
     restart: unless-stopped
     environment:

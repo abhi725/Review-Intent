@@ -1267,6 +1267,33 @@ async def cron_alerts():
     return await monitoring.alerts()
 
 
+@cron.post("/push-sheet")
+async def cron_push_sheet():
+    """Write the queue into the configured Google Sheet.
+
+    Free — the Sheets API costs nothing — so it belongs on the schedule by the
+    same rule as /discover. It replaces the public CSV route the sheet used to
+    pull with IMPORTDATA, which had to be world-readable because IMPORTDATA
+    cannot send an Authorization header.
+    """
+    from intentdesk.services import sheets
+
+    try:
+        return await sheets.push_leads()
+    except sheets.SheetsUnavailable as exc:
+        # 503 with the reason, not a 200 with an empty result. A push that
+        # silently does nothing is indistinguishable from a quiet week.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@cron.get("/push-sheet/probe")
+async def cron_push_sheet_probe():
+    """Whether the Sheets push would work, and where it breaks if not."""
+    from intentdesk.services import sheets
+
+    return await sheets.probe()
+
+
 @cron.get("/leads")
 async def cron_leads(
     status: Optional[str] = None,

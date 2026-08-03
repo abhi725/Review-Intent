@@ -31,6 +31,8 @@ SCHEDULABLE = {
     "/alerts",
     "/digest",
     "/leads",     # read-only: returns stored rows for the Sheets sync, collects nothing
+    "/push-sheet",        # writes stored rows into Google Sheets; the API is free
+    "/push-sheet/probe",  # reports whether that push would work
 }
 
 # Priced per row or per run. These stay behind an admin session and a button

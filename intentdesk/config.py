@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     apify_token: str = ""
     apollo_api_key: str = ""
 
+    # Google Sheets push. The service account JSON key, base64-encoded — one
+    # opaque value rather than separate email and key fields, because a PEM
+    # private key spread across a .env file is where newline handling goes wrong,
+    # and one value cannot be half-configured.
+    google_sheets_sa_json: str = ""
+    google_sheets_id: str = ""
+
     # Unguessable path segment for the public CSV export that Google Sheets'
     # IMPORTDATA reads. **Anyone holding the URL can read the lead queue** —
     # IMPORTDATA cannot send an Authorization header, so the secret has to be in

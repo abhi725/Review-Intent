@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.11.2
+    image: swan-intent-api:0.12.0
     container_name: swan-intent-api
     restart: unless-stopped
     environment:
@@ -45,6 +45,9 @@ services:
       # blocked — see collectors/proxy.py.
       # Public CSV export for Google Sheets. Empty disables the route; a public
       # data path must be switched on deliberately rather than inherited.
+      # Google Sheets push. The service account key, base64-encoded.
+      GOOGLE_SHEETS_SA_JSON: ${GOOGLE_SHEETS_SA_JSON:-}
+      GOOGLE_SHEETS_ID: ${GOOGLE_SHEETS_ID:-}
       SHEET_EXPORT_TOKEN: ${SHEET_EXPORT_TOKEN:-}
       APIFY_RESIDENTIAL_PROXY: ${APIFY_RESIDENTIAL_PROXY:-false}
       APIFY_PROXY_PASSWORD: ${APIFY_PROXY_PASSWORD:-}

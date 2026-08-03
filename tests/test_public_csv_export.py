@@ -280,7 +280,86 @@ def test_prose_is_measured_but_wide_blocks_are_not():
     from intentdesk.api import work
 
     css = work._CSS
-    assert "main > p," in css and "max-width:var(--measure)" in css
-    assert "main > .scroll," in css and "max-width:none" in css
+    # Descendant :is(), not child selectors — the content is nested inside
+    # `details > .secbody` now, and `main > p` would silently stop matching.
+    assert "main :is(p,ul,ol" in css and "max-width:var(--measure)" in css
+    assert "main :is(.scroll,.formula" in css and "max-width:none" in css
+    assert "main > p," not in css, (
+        "a child selector cannot survive the accordion nesting"
+    )
     # The column itself must be wider than the measure, or the breakout does nothing.
     assert "minmax(0,900px)" in css
+
+
+# ------------------------------------------------- the accordion refactor
+@pytest.mark.parametrize("render,code,n", [
+    ("visibility_agent_page", "C", 8),
+    ("growth_strategy_page", "D", 10),
+])
+def test_sections_are_collapsed_with_the_first_open(render, code, n):
+    """Ten screens of continuous column was the complaint — measured at ~9,100px
+    and ~10,200px. A page of nothing but closed boxes is the opposite mistake, so
+    the first section is open."""
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    assert html.count('<details class="sec"') == n
+    assert html.count('<details class="sec" open') == 1
+    assert f'>{code}1</span>' in html
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_the_refactor_dropped_no_prose(render):
+    """The accordion splits existing markup on its own h2 boundaries rather than
+    the content being re-authored, so every word must survive the move. This is
+    the test that makes that claim checkable."""
+    import re
+
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    main = re.search(r"<main>(.*?)</main>", html, re.S).group(1)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", main))
+    # Both documents were ~17,000 characters of prose before the split.
+    assert len(text) > 15_000, f"only {len(text)} characters survived"
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_every_section_carries_its_finding_not_just_a_title(render):
+    """The one real cost of collapsing a submission is a reader who never opens a
+    section. A summary that restates its heading does nothing to mitigate that."""
+    import re
+
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    blurbs = re.findall(r'<p class="sb">(.*?)</p>', html, re.S)
+    assert len(blurbs) == html.count('<details class="sec"')
+    for b in blurbs:
+        assert len(b) > 45, f"blurb too thin to carry a finding: {b!r}"
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_rail_is_generated_from_the_same_split(render):
+    """Rail and sections were two hand-written lists; an entry pointing at an id
+    that no longer existed was a real possibility."""
+    import re
+
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    rail = re.search(r'class="rail">(.*?)</aside>', html, re.S).group(1)
+    ids = re.findall(r'href="#([\w-]+)"', rail)
+    assert len(ids) == html.count('<details class="sec"')
+    assert not [i for i in ids if f'id="{i}"' not in html]
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_closed_sections_open_themselves_when_needed(render):
+    """Printing, or following an anchor, must not land on a closed box."""
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    assert "beforeprint" in html
+    assert "hashchange" in html
+    assert 'id="toggle-all"' in html

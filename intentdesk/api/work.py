@@ -31,6 +31,8 @@ Components never reference a colour inside a media query.
 turn up in a search for the company.
 """
 
+import re
+
 from html import escape
 
 # Kept as reference rather than interpolated into the CSS. The CSS below declares
@@ -134,27 +136,14 @@ body{
    — the alternative is remembering to wrap, and the failure when you forget is a
    paragraph 900px wide, which is exactly the thing the measure exists to prevent. */
 main{min-width:0}
-main > p,
-main > ul,
-main > ol,
-main > h1,
-main > h2,
-main > h3,
-main > h4,
-main > .lede,
-main > .qual,
-main > .eyebrow,
-main > .note{max-width:var(--measure)}
+/* Descendant selectors via :is(), not child selectors. The content sits inside
+   `details > .secbody` now, and a `main > p` rule silently stops matching the
+   moment anything is nested — the measure would vanish with nothing to show it. */
+main :is(p,ul,ol,h1,h3,h4,.lede,.qual,.eyebrow,.note){max-width:var(--measure)}
 /* Wide blocks deliberately take the full column: tables, the scoring formula,
    the stat rows and the layered lists all carry structure that benefits from
    width, and all of them were scrolling or wrapping badly inside the measure. */
-main > .scroll,
-main > .formula,
-main > .grid2,
-main > .layers,
-main > .card,
-main > .stat,
-main > .next{max-width:none}
+main :is(.scroll,.formula,.grid2,.layers,.card,.stat,.next){max-width:none}
 
 /* -------------------------------------------------------------- typography */
 h1,h2,h3,h4{
@@ -285,6 +274,44 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--search);
   animation:none!important;scroll-behavior:auto!important}}
 html{scroll-behavior:smooth}
 :target{scroll-margin-top:86px}
+/* --------------------------------------------------------------- accordion */
+/* Native <details>. The whole document is ten screens of continuous column
+   otherwise — measured at ~9,100px and ~10,200px — which is the complaint this
+   answers. The risk of collapsing a submission is that a reader never opens a
+   section, so it is mitigated three ways: the summary line carries the finding
+   rather than only a title, "Expand all" is one click, and anything that needs
+   the content open (printing, following an anchor) opens it automatically. */
+details.sec{border-top:1px solid var(--line)}
+details.sec:first-of-type{border-top:0}
+summary{cursor:pointer;list-style:none;padding:19px 0;
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  column-gap:14px;align-items:start}
+summary::-webkit-details-marker{display:none}
+summary::marker{content:""}
+summary:hover h2,summary:focus-visible h2{color:var(--search)}
+summary h2{grid-column:2;margin:0;padding:0;border-top:0;
+  font-size:clamp(20px,2.4vw,25px);line-height:1.24}
+.sc{grid-column:1;grid-row:1/span 2;font-family:ui-monospace,Menlo,monospace;
+  font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em;
+  padding-top:7px;min-width:26px}
+.sb{grid-column:2;margin:5px 0 0;font-size:14.5px;line-height:1.5;
+  color:var(--muted);max-width:var(--measure)}
+.chev{grid-column:3;grid-row:1;width:9px;height:9px;margin-top:9px;
+  border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:rotate(-45deg);transition:transform .18s ease}
+details[open] > summary .chev{transform:rotate(45deg)}
+details[open] > summary h2{color:var(--ink)}
+.secbody{padding:0 0 36px}
+.secbody > :first-child{margin-top:0}
+.secbody h3:first-child{margin-top:0}
+
+.allbar{display:flex;align-items:center;gap:12px;margin:26px 0 6px}
+#toggle-all{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  color:var(--ink);background:var(--raise);border:1px solid var(--line);
+  border-radius:7px;padding:7px 14px}
+#toggle-all:hover{border-color:var(--search);color:var(--search)}
+.allbar span{font-size:13px;color:var(--muted)}
+
 /* ------------------------------------------------------------ small screens */
 /* Written as a max-width block rather than by lowering the base, because the
    desktop reading experience is the one the type scale was set for. */
@@ -328,6 +355,79 @@ html{scroll-behavior:smooth}
 """
 
 
+_H2 = re.compile(r'<h2 id="([\w-]+)">(.*?)</h2>', re.S)
+
+
+def _accordion(body: str, blurbs: dict, code: str) -> tuple[str, str]:
+    """Turn a linear document into collapsed sections, and build the rail from
+    the same split.
+
+    Mechanical on purpose. It splits the existing markup on its own `<h2 id>`
+    boundaries rather than the content being re-authored into sections by hand,
+    so no prose can be dropped in the move — a test asserts the text length
+    survives. It also makes the rail and the sections one source of truth; they
+    were two lists before, and a rail entry pointing at an id that no longer
+    existed was a real possibility.
+
+    The first section is open, because a page of nothing but closed boxes reads
+    as an empty page.
+    """
+    parts = _H2.split(body)
+    intro, rest = parts[0], parts[1:]
+
+    out = [intro,
+           '<div class="allbar"><button id="toggle-all" type="button" '
+           'aria-label="Expand every section">Expand all</button>'
+           f'<span>{len(rest) // 3} sections</span></div>']
+    rail = []
+
+    for i in range(0, len(rest), 3):
+        sid, title, chunk = rest[i], rest[i + 1], rest[i + 2]
+        n = i // 3 + 1
+        blurb = blurbs.get(sid, "")
+        out.append(
+            f'<details class="sec"{" open" if n == 1 else ""}>'
+            f'<summary>'
+            f'<span class="sc">{code}{n}</span>'
+            f'<h2 id="{sid}">{title}</h2>'
+            + (f'<p class="sb">{blurb}</p>' if blurb else "")
+            + '<span class="chev" aria-hidden="true"></span>'
+            f'</summary><div class="secbody">{chunk}</div></details>'
+        )
+        # Strip tags from the heading for the rail: some carry inline markup.
+        label = re.sub(r"<[^>]+>", "", title).strip()
+        rail.append(f'<a href="#{sid}">{code}{n} &middot; {label}</a>')
+
+    return "".join(out), "".join(rail)
+
+
+# Opens whatever needs to be open. Three cases, all of which would otherwise
+# leave a reader looking at a closed box: following an anchor from the rail or a
+# shared link, printing, and clicking "Expand all". Without JS the page still
+# works — <details> is native, and every summary carries its own finding.
+_JS = """
+(function(){
+  var secs=document.querySelectorAll('details.sec');
+  var btn=document.getElementById('toggle-all');
+  function setAll(open){for(var i=0;i<secs.length;i++)secs[i].open=open;}
+  if(btn)btn.addEventListener('click',function(){
+    var closed=false;
+    for(var i=0;i<secs.length;i++)if(!secs[i].open){closed=true;break;}
+    setAll(closed);
+    btn.textContent=closed?'Collapse all':'Expand all';
+  });
+  function reveal(){
+    var id=location.hash.slice(1);if(!id)return;
+    var el=document.getElementById(id);if(!el)return;
+    var d=el.closest('details.sec');
+    if(d&&!d.open){d.open=true;el.scrollIntoView();}
+  }
+  window.addEventListener('hashchange',reveal);reveal();
+  window.addEventListener('beforeprint',function(){setAll(true);});
+})();
+"""
+
+
 def _shell(*, title: str, description: str, current: str, rail: str,
            body: str) -> str:
     """One document skeleton for both pages, so they cannot drift apart."""
@@ -364,23 +464,12 @@ def _shell(*, title: str, description: str, current: str, rail: str,
   chipped <span class="chip reasoned">reasoned</span>. Part E (proof of work) is
   personal work history and is deliberately not on these pages.
 </footer>
+<script>{_JS}</script>
 </body>
 </html>"""
 
 
 # ----------------------------------------------------------------- Part C
-_RAIL_C = """
-<a href="#surfaces">Three surfaces</a>
-<a href="#audit">Ticmint audit</a>
-<a href="#agent">The agent</a>
-<a href="#priority">Prioritisation</a>
-<a href="#publishing">Autonomous publishing</a>
-<a href="#measure">Measurement</a>
-<a href="#kill">The kill number</a>
-<a href="#failure">Failure modes</a>
-"""
-
-
 def visibility_agent_page() -> str:
     body = """
 <p class="eyebrow">Part C</p>
@@ -777,31 +866,31 @@ corpora no single vendor&rsquo;s policy change can erase.</p>
   <a href="/work/growth-strategy"><small>Next</small>Part D &middot; Growth strategy &rarr;</a>
 </div>
 """
+    # Each blurb carries the section's finding, not a restatement of its title.
+    # It is the mitigation for the one real cost of collapsing a submission: a
+    # reader who never opens a section should still take the argument away.
+    blurbs = {
+        "surfaces": "Three units of competition, not three tactics — a URL, a claim, an entity. Each fails differently.",
+        "audit": "Schema and AI-crawler access are already right. Six gaps; the biggest is a SaaS with a public price and no price schema.",
+        "agent": "Seven sources — including the one nobody instruments: AI crawler hits in your own server logs.",
+        "priority": "A scoring function, plus a 70/20/10 capacity policy so it cannot over-fit to whatever already works.",
+        "publishing": "Yes for reversible work, never for claims. The line is reversibility × claim risk, not writing quality.",
+        "measure": "Presence, eligibility, demand transfer — because rank does not exist here and GA4 sees nothing.",
+        "kill": "One compound stop-condition, and two switches that do not wait for it.",
+        "failure": "Fabrication at scale, Goodharting the new metric, and cannibalisation from volume.",
+    }
+    body_html, rail = _accordion(body, blurbs, "C")
     return _shell(
         title="Part C — The Organic Visibility Agent | Ticmint",
         description=("How one agent owns ranked search, answer engines and "
                      "generative recommendation for Ticmint — with a live audit, "
                      "prioritisation logic, and measurement that works when "
                      "nothing lands in GA4."),
-        current="c", rail=_RAIL_C, body=body,
+        current="c", rail=rail, body=body_html,
     )
 
 
 # ----------------------------------------------------------------- Part D
-_RAIL_D = """
-<a href="#icp">ICP &amp; segmentation</a>
-<a href="#primary">Primary ICP</a>
-<a href="#secondary">Secondary ICP</a>
-<a href="#channels">Channels</a>
-<a href="#notdoing">Not doing</a>
-<a href="#outbound">Cold outreach</a>
-<a href="#agent">The agent behind it</a>
-<a href="#funnel">Funnel</a>
-<a href="#metrics">Metrics</a>
-<a href="#risks">Risks</a>
-"""
-
-
 def growth_strategy_page() -> str:
     body = """
 <p class="eyebrow">Part D</p>
@@ -1206,10 +1295,23 @@ looking slower for two quarters.</p>
   <a href="/work/visibility-agent"><small>Previous</small>&larr; Part C &middot; Visibility agent</a>
 </div>
 """
+    blurbs = {
+        "icp": "Seven segments, split on who owns the audience and who carries the risk.",
+        "primary": "Mid-market promoters. The fee delta is a line item they can compute in their head — displacement, not new budget.",
+        "secondary": "Federations. Bigger logos, 3–9 month cycles, and the case studies that sell the primary ICP.",
+        "channels": "Three, not eight: signal-qualified outbound, comparison-led organic, review sites.",
+        "notdoing": "No paid search at scale — the keyword space is polluted by consumers buying tickets.",
+        "outbound": "Frustration is discoverable, so the opener is evidence rather than guesswork. No evidence row, no personalised line.",
+        "agent": "Install signals do the targeting, review signals do the messaging — 29 review signals matched zero companies.",
+        "funnel": "The real bottom-of-funnel commitment is agreeing to run one live event, not a signature.",
+        "metrics": "North star: live ticketed events per month. Revenue is a lagging function of it.",
+        "risks": "Seasonality is the most likely failure and the least dramatic — the cycle runs 2–3× the model.",
+    }
+    body_html, rail = _accordion(body, blurbs, "D")
     return _shell(
         title="Part D — Growth Strategy | Ticmint",
         description=("ICP segmentation, channel cuts, and an outbound motion "
                      "built on discoverable organiser frustration — for a "
                      "white-label event ticketing platform."),
-        current="d", rail=_RAIL_D, body=body,
+        current="d", rail=rail, body=body_html,
     )

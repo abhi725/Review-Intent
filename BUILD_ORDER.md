@@ -116,14 +116,71 @@ free route is closed rather than that the collector is broken.
 
 ---
 
-## Still open after this deploy
+## Still open after 0.7.0 — mostly closed by 0.9.1, below
 
 | | |
 |---|---|
-| **The audience gap** | Every classified review is Eventbrite's, and every discovered company runs MeraEvents. So no lead can reach the `platform_pattern` draft yet — verified live: a real draft for `4moles.com` came back `basis: "none"`. MeraEvents has no G2 and no verified Trustpilot page, which is the hole to fill |
+| ~~**The audience gap**~~ | **Closed in 0.8.0.** See below |
 | **Trustpilot has never actually run** | Ticket Tailor is cleared and priced at $0.05. Not spent — paid work runs on a click, and that click is the user's |
 | **Apollo `people/match`** | Still 403 on the free plan. `identity.resolve()` reports that as a billing state rather than "no person found", and 25 named reviewers are waiting. Most are G2 rows that `assess()` refuses for free anyway |
-| **`$1.5064` of unledgered spend** | Pre-dates `spend_calls`, shown in the Sources panel rather than reconciled away |
+| **Unledgered spend** | Now measurable: `/cron/reconcile` reports `recorded 1.5064` against Apify's own `3.162`, understated by **$1.6556**. All of it pre-dates `spend_calls` — that table is still empty, so nothing since has cost anything — but the monthly cap is guarding the smaller number |
+
+---
+
+# 0.8.0 → 0.9.1, deployed 2026-08-03
+
+266 tests, migration 009. The audience gap is closed: a real lead
+(`Replay Events`, id 24) drafted with `basis: "platform_pattern"`,
+`category: high_fees`, `evidence_count: 8` — the drafter's centrepiece firing on
+real data for the first time. Everything below was free; `spend_calls` is still
+empty.
+
+## What closed the gap
+
+Not another review source. Both cheap ones are closed from this VM and were
+measured, not assumed: **TrustRadius and SoftwareSuggest return 403 to their own
+robots.txt** for all twelve candidate slugs, and **every Ticket Tailor path sits
+behind a Cloudflare interstitial** — including `/sitemap.xml`, which its
+robots.txt explicitly permits.
+
+What worked was the other direction: stop hunting complaints about the platform
+our companies run, and find companies on the platform whose complaints are
+already classified. `EventbriteOrganisers` reads
+`sitemap_xml/organizer_profile_pages00/01.xml.gz` — ~100,000 organisers, and the
+name is in the slug, so a pass costs **two** HTTP requests rather than one per
+profile.
+
+## Four defects found by running it, not by reading it
+
+| | |
+|---|---|
+| **`APOLLO_API_KEY` never reached production** | Set in `.env.prod`, absent from the compose `environment:` allow-list. Second time that list has bitten (`PUBLIC_BASE_URL`, Aug 2) and worse, because every consumer treats a missing key as an empty result: `/cron/enrich` returned `enriched 0` and the resolver reported no match — both indistinguishable from Apollo not knowing these companies. With the key passed through: **10/10 enriched.** `test_prod_env_passthrough.py` now diffs the three files |
+| **Promotion hardcoded `country="IN"`** | True while MeraEvents was the only source, false once Eventbrite was added — "Replay Events" (Milton Keynes) and "The Green Light" (Roosendaal) were stored as Indian leads. The gate could not catch it: `apollo_search` collapsed a country to `"IN" if name == "India" else None`, so *known foreign* and *unknown* were the same value and the non-India downgrade could never fire on the only free resolver. `is_india()` is now three-state |
+| **`companies.country` was `NOT NULL DEFAULT 'IN'`** | The assumption was in the schema, so the first honest unknown crashed `resolve_batch`. 009 drops both. A default of `'IN'` is invisible at the call site in a way a constraint violation is not |
+| **Resolution spent in discovery order** | 2,031 MeraEvents rows queued ahead of 450 Eventbrite ones, and MeraEvents has no classified complaint — every one bought a company whose best draft is the generic pitch. Pending organisers now sort by whether we hold classified complaints about their platform. Prioritised, not filtered |
+
+## Two things worth not rediscovering
+
+**The India hint orders, it never filters** — and its first version was wrong in
+a way only live data showed. Ethnicity and alumni tokens (`india`, `desi`, `iit`)
+sorted **US diaspora groups** to the front: "IIT Bay Area Alumni Association",
+"Indian Health Center of Santa Clara Valley", and a Caribbean carnival matched on
+`indian` inside "West Indian". Eventbrite's base is overwhelmingly American, so
+Indian-*named* US orgs outnumber Indian companies. In-country place names only.
+
+**Cloudflare caps a cron request at ~100s, and fails it invisibly.**
+`/cron/discover?limit=400` returned an empty body while the run **completed
+server-side** — 450 organisers landed. n8n would have logged a failed node for
+work that succeeded. The node ships with `limit=100` (measured: 50 → 28s).
+
+## Still open
+
+| | |
+|---|---|
+| **n8n workflow is imported but INACTIVE** | All 9 nodes are in the live sqlite with real tokens. Activation needs the UI toggle or an n8n restart, and a restart interrupts 13 active production workflows — so it is the user's call, not a side effect of this work |
+| **Non-Indian leads are queued, not filtered** | Truthfully labelled now, but "The Green Light — Roosendaal" still sits in the queue at score 30. Whether a confirmed foreign company should score at all is a product decision |
+| **~2,400 organisers unresolved** | Apollo-only resolution is free and lands ~15% (3/20, 2/25); GMB costs ~$0.0027 and lands more. Batched and resumable |
+| **`generic_pitch: true`** | Unchanged and unchangeable from here — the value proposition is the one input no code supplies |
 
 ---
 

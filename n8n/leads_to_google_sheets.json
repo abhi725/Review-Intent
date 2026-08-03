@@ -85,12 +85,12 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "PASTE_YOUR_SPREADSHEET_ID_HERE"
+          "value": "REDACTED_SPREADSHEET_ID"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "name",
-          "value": "Leads"
+          "mode": "id",
+          "value": "0"
         },
         "columns": {
           "mappingMode": "autoMapInputData",

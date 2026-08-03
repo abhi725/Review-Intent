@@ -27,19 +27,26 @@ Bearer <the MCP_BEARER_TOKEN value from /root/intent-desk/.env.prod>
 The token is deliberately not committed here. Keep the word `Bearer` and the
 space before the token.
 
-**3. Create the sheet.** Make a Google Sheet with a tab named `Leads` and paste
-this as row 1, exactly — the sync maps incoming fields onto these headers by
-name, and a header that does not match arrives as a new column:
+**3. The target sheet is already set** to document
+`REDACTED_SPREADSHEET_ID`, first tab.
+
+The tab is addressed by **gid `0`** rather than by title. `sheetName` has no
+"by name" mode — only *From List*, *By URL* and *By ID*, where the ID is the gid —
+so a title like `Leads` is not a value this field accepts, and gid 0 is the first
+tab whatever it ends up being called.
+
+Row 1 of that sheet was empty when this was wired. `appendOrUpdate` maps fields
+onto the header row, so either let the first run write the headers or paste them
+yourself to be certain:
 
 ```
 id	Company	Domain	City	Currently runs	Agents	Score	Heat	Status	Contact	Title	Phone	Email	Industry	Employees	Vendor verified	Draft subject	Draft body	Created
 ```
 
-**4. Connect your Google account.** Open the *Append or update in Sheets* node,
-create a *Google Sheets OAuth2* credential, and sign in. Then set the document:
-replace `PASTE_YOUR_SPREADSHEET_ID_HERE` with your spreadsheet's ID — the part of
-the URL between `/d/` and `/edit` — or switch the field to *From list* and pick it
-once the credential is connected.
+**4. Connect your Google account** — the one step that cannot be done from here,
+because it needs Google's consent screen in a browser signed in as you. Open the
+*Append or update in Sheets* node, create a *Google Sheets OAuth2* credential and
+sign in. This n8n has no credentials stored at all, so there is nothing to reuse.
 
 **5. Run it once by hand** before activating, so a mistake shows up while you are
 watching. Then activate with the toggle.

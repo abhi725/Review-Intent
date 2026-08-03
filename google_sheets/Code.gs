@@ -1,141 +1,167 @@
 /**
- * Intent Desk → Google Sheets, with no Google authentication to set up.
- *
- * Why this exists alongside the n8n workflow: connecting Google to a self-hosted
- * n8n means either an OAuth client (Cloud project + consent screen + test user +
- * a redirect URI matched literally) or a service account (key file + remembering
- * to share the sheet with its address). Both are four-step setups where three of
- * the steps fail in ways that look like a scope error.
+ * Intent Desk -> Google Sheets. No Google credentials, no deployment.
  *
  * This script lives inside the spreadsheet and runs *as you*. It already has
  * permission to write to the sheet, because it is the sheet. There is no client
- * ID, no consent screen, no service account and no key. It pulls rather than
- * being pushed to, so nothing needs to reach into Google from outside.
+ * ID, no consent screen, no service account, no key file, and nothing to deploy.
+ * "API executable" and web-app deployments are for calling a script from
+ * outside; the Run button and a time trigger need neither.
  *
  * Setup:
  *   1. In the spreadsheet: Extensions -> Apps Script
- *   2. Delete whatever is in Code.gs and paste this file
- *   3. Fill in TOKEN below
- *   4. Run `syncLeads` once. Google asks you to authorise *your own* script —
- *      that is the only prompt, and it is your account granting your script
- *      access to your sheet.
- *   5. Run `installTrigger` once to make it repeat every 6 hours.
+ *   2. Select all of Code.gs and paste this over it
+ *   3. Run `intentDeskDiagnose` and read the log
+ *   4. Run `intentDeskInstallTrigger` once to repeat every 6 hours
  *
- * If anything fails, run `diagnose` — Apps Script reports most problems as
- * "An unknown error has occurred", which names neither the stage nor the line.
+ * Written defensively in two specific ways, because Apps Script reports most
+ * failures as "An unknown error has occurred, please try again later", which
+ * names neither the stage nor the line:
+ *
+ * **ES5 only — `var`, no `const`/`let`, no arrow functions, no template
+ * literals.** A project on the legacy Rhino runtime rejects `const` outright,
+ * and a syntax error at load time is one of the things that surfaces as that
+ * generic message rather than as a syntax error. `var` also *may be redeclared*,
+ * so pasting this alongside older code cannot produce a duplicate-declaration
+ * failure — which `const` would, because every .gs file in a project shares one
+ * global scope.
+ *
+ * **Every name is prefixed.** Two files declaring `TOKEN` or `syncLeads` collide
+ * in that shared scope, and nothing in the editor points at the collision.
  */
 
 // ---------------------------------------------------------------- configuration
-const API_URL = 'https://intent.swandigitals.com/cron/leads';
+// Function-scoped rather than global: a global cannot collide with anything if it
+// does not exist.
+function intentDeskConfig_() {
+  return {
+    apiUrl: 'https://intent.swandigitals.com/cron/leads',
 
-// The MCP_BEARER_TOKEN from /root/intent-desk/.env.prod. It stays inside your own
-// Apps Script project, which only you can read.
-const TOKEN = 'PASTE_MCP_BEARER_TOKEN_HERE';
+    // MCP_BEARER_TOKEN from /root/intent-desk/.env.prod. It stays inside your own
+    // Apps Script project, which only you can read.
+    token: 'PASTE_MCP_BEARER_TOKEN_HERE',
 
-// The spreadsheet, by ID. Used rather than getActiveSpreadsheet() because that
-// returns null in a *standalone* script project — one created at
-// script.google.com instead of from Extensions -> Apps Script inside the sheet —
-// and the resulting failure surfaces as Apps Script's generic "An unknown error
-// has occurred", which names neither the cause nor the line. By ID it works
-// either way.
-const SPREADSHEET_ID = 'REDACTED_SPREADSHEET_ID';
+    // By ID rather than getActiveSpreadsheet(), which returns null in a
+    // standalone script project -- one created at script.google.com instead of
+    // from Extensions -> Apps Script inside the sheet.
+    spreadsheetId: 'REDACTED_SPREADSHEET_ID',
 
-// Which tab to write to. The first sheet, whatever it is called.
-const SHEET_INDEX = 0;
+    sheetIndex: 0,
 
-// The column the sync identifies a lead by, for its lifetime. Everything else
-// about a lead can change — score, status, phone, the draft — so matching on
-// anything else would append a second copy instead of updating the first.
-const KEY = 'id';
+    // The column identifying a lead for its lifetime. Everything else about a
+    // lead can change -- score, status, phone, the draft -- so matching on
+    // anything else appends a second copy instead of updating the first.
+    key: 'id',
 
-const PAGE_SIZE = 500;
+    pageSize: 500
+  };
+}
 
 // ---------------------------------------------------------------------- syncing
-function syncLeads() {
-  const rows = fetchAllLeads_();
+function intentDeskSync() {
+  var cfg = intentDeskConfig_();
+  var rows = intentDeskFetch_(cfg);
   if (!rows.length) {
-    Logger.log('no leads returned — nothing to write');
+    Logger.log('no leads returned -- nothing to write');
     return;
   }
-
-  const sheet = targetSheet_();
-  const headers = writeHeaders_(sheet, rows[0]);
-  upsert_(sheet, headers, rows);
+  var sheet = intentDeskSheet_(cfg);
+  var headers = intentDeskHeaders_(sheet, rows[0]);
+  intentDeskUpsert_(cfg, sheet, headers, rows);
   Logger.log('synced %s leads', rows.length);
 }
 
-/** The tab to write to, resolved by ID so a standalone project works too. */
-function targetSheet_() {
-  const book = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheets = book.getSheets();
-  if (SHEET_INDEX >= sheets.length) {
-    throw new Error('SHEET_INDEX ' + SHEET_INDEX + ' but the spreadsheet has only '
-                    + sheets.length + ' tab(s)');
+function intentDeskSheet_(cfg) {
+  var book = SpreadsheetApp.openById(cfg.spreadsheetId);
+  var sheets = book.getSheets();
+  if (cfg.sheetIndex >= sheets.length) {
+    throw new Error('sheetIndex ' + cfg.sheetIndex + ' but the spreadsheet has '
+                    + 'only ' + sheets.length + ' tab(s)');
   }
-  return sheets[SHEET_INDEX];
+  return sheets[cfg.sheetIndex];
 }
 
 /**
  * Every page, followed to the end.
  *
  * Paged because Cloudflare cuts a request at about 100 seconds and reports it as
- * a failure even when the work succeeded — so one unbounded request would start
- * failing silently as the queue grew. `has_more` is the endpoint's own signal;
- * a short page is not relied on as a proxy for it.
+ * a failure even when the work succeeded, so one unbounded request would begin
+ * failing silently as the queue grew. `has_more` is the endpoint's own signal; a
+ * short page is not relied on as a proxy for it.
  */
-function fetchAllLeads_() {
-  const out = [];
-  let offset = 0;
+function intentDeskFetch_(cfg) {
+  var out = [];
+  var offset = 0;
 
   while (true) {
-    const url = API_URL + '?limit=' + PAGE_SIZE + '&offset=' + offset;
-    const response = UrlFetchApp.fetch(url, {
+    var url = cfg.apiUrl + '?limit=' + cfg.pageSize + '&offset=' + offset;
+    var response = UrlFetchApp.fetch(url, {
       method: 'get',
-      headers: { Authorization: 'Bearer ' + TOKEN },
+      headers: { Authorization: 'Bearer ' + cfg.token },
       // Without this a non-200 throws with a message that omits the body, which
       // is where the reason actually is.
-      muteHttpExceptions: true,
+      muteHttpExceptions: true
     });
 
-    const code = response.getResponseCode();
+    var code = response.getResponseCode();
     if (code === 401) {
-      throw new Error('401 from Intent Desk — TOKEN is wrong or missing. It is '
-                      + 'MCP_BEARER_TOKEN from .env.prod.');
+      throw new Error('401 from Intent Desk -- the token is wrong or missing. '
+                      + 'It is MCP_BEARER_TOKEN from .env.prod.');
     }
     if (code !== 200) {
       throw new Error('Intent Desk returned ' + code + ': '
                       + response.getContentText().slice(0, 300));
     }
 
-    const body = JSON.parse(response.getContentText());
-    out.push.apply(out, body.rows || []);
-    if (!body.has_more) return out;
+    var body = JSON.parse(response.getContentText());
+    var page = body.rows || [];
+    for (var i = 0; i < page.length; i++) {
+      out.push(page[i]);
+    }
+    if (!body.has_more) {
+      return out;
+    }
 
-    offset += PAGE_SIZE;
+    offset += cfg.pageSize;
     // A runaway guard, not a business rule.
-    if (offset > 20000) return out;
+    if (offset > 20000) {
+      return out;
+    }
   }
 }
 
 /**
  * Header row, written from the data rather than hard-coded here.
  *
- * A hard-coded list in this file would be a second place to edit whenever the
- * export changes columns, and the failure when the two disagree is silent: rows
- * land under the wrong headings.
+ * A hard-coded list would be a second place to edit whenever the export changes
+ * columns, and when the two disagree the failure is silent: rows land under the
+ * wrong headings.
  */
-function writeHeaders_(sheet, sample) {
-  const wanted = Object.keys(sample);
-  const width = sheet.getLastColumn();
-  const existing = width
-    ? sheet.getRange(1, 1, 1, width).getValues()[0].filter(String)
-    : [];
+function intentDeskHeaders_(sheet, sample) {
+  var wanted = Object.keys(sample);
+  var width = sheet.getLastColumn();
+  var existing = [];
+  if (width) {
+    var row = sheet.getRange(1, 1, 1, width).getValues()[0];
+    for (var i = 0; i < row.length; i++) {
+      if (row[i] !== '' && row[i] !== null) {
+        existing.push(row[i]);
+      }
+    }
+  }
 
-  // Compared element by element rather than by joining on a separator. A joined
-  // comparison needs a separator that cannot occur inside a header, and choosing
-  // one is how a stray control character got into this file once already.
-  const unchanged = existing.length === wanted.length
-    && existing.every(function (h, i) { return h === wanted[i]; });
+  // Compared element by element rather than by joining on a separator. Choosing
+  // a separator is how a stray control character got into this file once, and
+  // the comparison does not need one: equal length plus equal members is the
+  // actual question.
+  var unchanged = existing.length === wanted.length;
+  if (unchanged) {
+    for (var j = 0; j < wanted.length; j++) {
+      if (existing[j] !== wanted[j]) {
+        unchanged = false;
+        break;
+      }
+    }
+  }
   if (unchanged) {
     return existing;
   }
@@ -147,35 +173,40 @@ function writeHeaders_(sheet, sample) {
 }
 
 /** Update the leads already present, append the ones that are not. */
-function upsert_(sheet, headers, rows) {
-  const keyCol = headers.indexOf(KEY) + 1;
-  if (!keyCol) throw new Error('no "' + KEY + '" column — cannot match rows');
+function intentDeskUpsert_(cfg, sheet, headers, rows) {
+  var keyCol = headers.indexOf(cfg.key) + 1;
+  if (!keyCol) {
+    throw new Error('no "' + cfg.key + '" column -- cannot match rows');
+  }
 
   // Existing keys mapped to their row number, read in one call. Reading per-lead
   // would be one API round trip each and Apps Script would time out.
-  const lastRow = sheet.getLastRow();
-  const seen = {};
+  var lastRow = sheet.getLastRow();
+  var seen = {};
   if (lastRow > 1) {
-    const keys = sheet.getRange(2, keyCol, lastRow - 1, 1).getValues();
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i][0];
-      if (k !== '' && k !== null) seen[String(k)] = i + 2;
+    var keys = sheet.getRange(2, keyCol, lastRow - 1, 1).getValues();
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i][0];
+      if (k !== '' && k !== null) {
+        seen[String(k)] = i + 2;
+      }
     }
   }
 
-  const appends = [];
-  rows.forEach(function (row) {
-    const line = headers.map(function (h) {
-      const v = row[h];
-      return v === undefined || v === null ? '' : v;
-    });
-    const at = seen[String(row[KEY])];
+  var appends = [];
+  for (var r = 0; r < rows.length; r++) {
+    var line = [];
+    for (var c = 0; c < headers.length; c++) {
+      var v = rows[r][headers[c]];
+      line.push(v === undefined || v === null ? '' : v);
+    }
+    var at = seen[String(rows[r][cfg.key])];
     if (at) {
       sheet.getRange(at, 1, 1, line.length).setValues([line]);
     } else {
       appends.push(line);
     }
-  });
+  }
 
   // One write for all new rows rather than one per row.
   if (appends.length) {
@@ -186,79 +217,94 @@ function upsert_(sheet, headers, rows) {
 
 // ------------------------------------------------------------------ diagnostics
 /**
- * Run this when something fails.
- *
- * Apps Script reports most failures as "An unknown error has occurred, please try
- * again later", which names neither the stage nor the line. This walks the four
- * things that can independently break and logs each one, so a single run says
- * which.
+ * Run this first. It walks the four things that can independently break and logs
+ * each with its interpretation, so one run says which stage is at fault instead
+ * of "an unknown error has occurred".
  */
-function diagnose() {
+function intentDeskDiagnose() {
+  var cfg = intentDeskConfig_();
+
+  Logger.log('--- 0. environment ---');
+  Logger.log('runtime supports ES5+; this script is ES5-only so it runs on both');
+  if (cfg.token.indexOf('PASTE_') === 0) {
+    Logger.log('STOP: the token is still the placeholder. Set cfg.token.');
+    return;
+  }
+  Logger.log('token length: %s', cfg.token.length);
+
   Logger.log('--- 1. reaching the spreadsheet ---');
   try {
-    const book = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const names = book.getSheets().map(function (s) { return s.getName(); });
+    var book = SpreadsheetApp.openById(cfg.spreadsheetId);
+    var names = [];
+    var sheets = book.getSheets();
+    for (var i = 0; i < sheets.length; i++) {
+      names.push(sheets[i].getName());
+    }
     Logger.log('OK: "%s", tabs: %s', book.getName(), names.join(', '));
-  } catch (e) {
-    Logger.log('FAILED: %s', e.message);
-    Logger.log('-> cannot open the sheet. Either SPREADSHEET_ID is wrong, or this '
-               + 'Google account has no access to it.');
+  } catch (e1) {
+    Logger.log('FAILED: %s', e1.message);
+    Logger.log('-> cannot open the sheet. The ID is wrong, or this Google account '
+               + 'has no access to it.');
     return;
   }
 
   Logger.log('--- 2. calling Intent Desk ---');
-  let body;
+  var body;
   try {
-    const r = UrlFetchApp.fetch(API_URL + '?limit=2&offset=0', {
+    var r = UrlFetchApp.fetch(cfg.apiUrl + '?limit=2&offset=0', {
       method: 'get',
-      headers: { Authorization: 'Bearer ' + TOKEN },
-      muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + cfg.token },
+      muteHttpExceptions: true
     });
-    Logger.log('HTTP %s, %s bytes', r.getResponseCode(), r.getContentText().length);
+    Logger.log('HTTP %s, %s bytes', r.getResponseCode(),
+               r.getContentText().length);
     if (r.getResponseCode() !== 200) {
       Logger.log('body: %s', r.getContentText().slice(0, 300));
-      Logger.log('-> 401 means TOKEN is wrong; 403 means Cloudflare refused the '
-                 + 'client rather than an auth failure.');
+      Logger.log('-> 401 means the token is wrong; 403 means Cloudflare refused '
+                 + 'the client rather than an auth failure.');
       return;
     }
     body = JSON.parse(r.getContentText());
-  } catch (e) {
-    Logger.log('FAILED: %s', e.message);
-    Logger.log('-> if this mentions authorisation, re-run and approve the prompt: '
-               + 'UrlFetchApp needs the external-request scope.');
+  } catch (e2) {
+    Logger.log('FAILED: %s', e2.message);
+    Logger.log('-> if this mentions authorisation, re-run and approve the prompt.');
     return;
   }
 
   Logger.log('--- 3. reading the payload ---');
-  Logger.log('rows: %s, has_more: %s', (body.rows || []).length, body.has_more);
-  if (!body.rows || !body.rows.length) {
+  var rows = body.rows || [];
+  Logger.log('rows: %s, has_more: %s', rows.length, body.has_more);
+  if (!rows.length) {
     Logger.log('-> no rows, so there is nothing to write. Not an error.');
     return;
   }
-  Logger.log('columns: %s', Object.keys(body.rows[0]).join(', '));
+  Logger.log('columns: %s', Object.keys(rows[0]).join(', '));
 
   Logger.log('--- 4. writing to the sheet ---');
   try {
-    const sheet = targetSheet_();
-    const probe = sheet.getLastRow() + 1;
+    var sheet = intentDeskSheet_(cfg);
+    var probe = sheet.getLastRow() + 1;
     sheet.getRange(probe, 1).setValue('diagnose: write test');
     SpreadsheetApp.flush();
     sheet.getRange(probe, 1).clearContent();
     Logger.log('OK: wrote and cleared row %s of "%s"', probe, sheet.getName());
-    Logger.log('--- all four stages passed; syncLeads should work ---');
-  } catch (e) {
-    Logger.log('FAILED: %s', e.message);
+    Logger.log('--- all stages passed; intentDeskSync should work ---');
+  } catch (e3) {
+    Logger.log('FAILED: %s', e3.message);
     Logger.log('-> the sheet opened but will not accept a write. Check it is not '
-               + 'protected, and that this account has edit rather than view access.');
+               + 'protected and that this account has edit access.');
   }
 }
 
 // --------------------------------------------------------------------- schedule
 /** Run once. Repeated runs replace the old trigger rather than stacking. */
-function installTrigger() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'syncLeads') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('syncLeads').timeBased().everyHours(6).create();
-  Logger.log('installed: syncLeads every 6 hours');
+function intentDeskInstallTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'intentDeskSync') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('intentDeskSync').timeBased().everyHours(6).create();
+  Logger.log('installed: intentDeskSync every 6 hours');
 }

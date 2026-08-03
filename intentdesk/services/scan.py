@@ -111,9 +111,9 @@ async def run(
             continue
 
         # `cost_model`, not `requires`. The old test was "needs a credential",
-        # which is wrong in both directions: Reddit needs OAuth credentials and
-        # costs nothing, so a free-only run was skipping a free source, and any
-        # future paid source without a token would have slipped through as free.
+        # which is wrong in both directions: a source can need a key and still be
+        # free, so a free-only run was skipping a free source, and any future
+        # paid source without a token would have slipped through as free.
         paid = coll.cost_model != "free"
 
         if free_only and paid:

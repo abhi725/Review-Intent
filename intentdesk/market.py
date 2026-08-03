@@ -43,7 +43,7 @@ SEGMENTS = ("organiser_saas", "consumer_marketplace")
 BRANDS: dict[str, dict] = {
     # ---------------------------------------------- India, the primary market
     "Eventbrite": {
-        "sources": ["tech", "jobs", "g2", "capterra", "reddit", "vendor_news"],
+        "sources": ["tech", "jobs", "g2", "capterra", "vendor_news"],
         "segment": "consumer_marketplace",
         "region": "global",
         "active": True,
@@ -56,49 +56,49 @@ BRANDS: dict[str, dict] = {
                            "ticket buyers, not organisers — do not spend here again",
     },
     "BookMyShow": {
-        "sources": ["tech", "jobs", "reddit"],
+        "sources": ["tech", "jobs"],
         "segment": "consumer_marketplace",
         "region": "IN",
         "active": True,
     },
     "Townscript": {
-        "sources": ["tech", "jobs", "reddit"],
+        "sources": ["tech", "jobs"],
         "segment": "organiser_saas",
         "region": "IN",
         "active": True,
     },
     "Explara": {
-        "sources": ["tech", "jobs", "reddit"],
+        "sources": ["tech", "jobs"],
         "segment": "organiser_saas",
         "region": "IN",
         "active": True,
     },
     "Paytm Insider": {
-        "sources": ["tech", "jobs", "reddit"],
+        "sources": ["tech", "jobs"],
         "segment": "consumer_marketplace",
         "region": "IN",
         "active": True,
     },
     "MeraEvents": {
-        "sources": ["tech", "jobs", "reddit"],
+        "sources": ["tech", "jobs"],
         "segment": "organiser_saas",
         "region": "IN",
         "active": True,
     },
     "Ticketmaster": {
-        "sources": ["tech", "jobs", "g2", "capterra", "reddit"],
+        "sources": ["tech", "jobs", "g2", "capterra"],
         "segment": "consumer_marketplace",
         "region": "global",
         "active": True,
     },
     "Zoho Backstage": {
-        "sources": ["tech", "jobs", "g2", "capterra", "reddit"],
+        "sources": ["tech", "jobs", "g2", "capterra"],
         "segment": "organiser_saas",
         "region": "IN",
         "active": True,
     },
     "Ticket Tailor": {
-        "sources": ["tech", "jobs", "g2", "reddit", "trustpilot"],
+        "sources": ["tech", "jobs", "g2", "trustpilot"],
         "segment": "organiser_saas",
         "region": "global",
         "active": True,
@@ -113,7 +113,7 @@ BRANDS: dict[str, dict] = {
     # Each still needs its Trustpilot page checked by hand before a paid run —
     # exactly the Tito-Express lesson — so they carry no URL yet.
     "Weezevent": {
-        "sources": ["tech", "reddit", "trustpilot"],
+        "sources": ["tech", "trustpilot"],
         "segment": "organiser_saas",
         "region": "FR",
         "active": False,
@@ -122,25 +122,25 @@ BRANDS: dict[str, dict] = {
                            "chasing refunds — right segment, wrong audience in practice",
     },
     "Humanitix": {
-        "sources": ["tech", "g2", "reddit"],
+        "sources": ["tech", "g2"],
         "segment": "organiser_saas",
         "region": "AU",
         "active": False,
     },
     "Billetto": {
-        "sources": ["tech", "reddit"],
+        "sources": ["tech"],
         "segment": "organiser_saas",
         "region": "EU",
         "active": False,
     },
     "Eventix": {
-        "sources": ["tech", "reddit"],
+        "sources": ["tech"],
         "segment": "organiser_saas",
         "region": "EU",
         "active": False,
     },
     "Cvent": {
-        "sources": ["tech", "jobs", "g2", "reddit"],
+        "sources": ["tech", "jobs", "g2"],
         "segment": "organiser_saas",
         "region": "US",
         "active": False,
@@ -149,21 +149,21 @@ BRANDS: dict[str, dict] = {
         "g2_slug": "cvent-event-marketing-management",
     },
     "vFairs": {
-        "sources": ["tech", "g2", "reddit"],
+        "sources": ["tech", "g2"],
         "segment": "organiser_saas",
         "region": "US",
         "active": False,
         "g2_slug": "vfairs",
     },
     "Whova": {
-        "sources": ["tech", "g2", "reddit"],
+        "sources": ["tech", "g2"],
         "segment": "organiser_saas",
         "region": "US",
         "active": False,
         "g2_slug": "whova",
     },
     "Zeffy": {
-        "sources": ["tech", "g2", "reddit"],
+        "sources": ["tech", "g2"],
         "segment": "organiser_saas",
         "region": "US",
         "active": False,
@@ -384,49 +384,6 @@ B2B_SLUG_CANDIDATES: dict[str, dict[str, str]] = {
         "ticket tailor": "ticket-tailor",
     },
 }
-
-# Subreddits worth searching. The audience rule from REVIEW_SOURCES applies
-# here too and is easy to get wrong: r/festivals and r/aves are full of ticket
-# buyers venting about queues and refunds, which reads like rich signal and is
-# the wrong person entirely. These are the organiser-side communities.
-# Ordered by how concentrated the organiser audience is, because the collector
-# walks them in order and a rate limit cuts the tail rather than the head.
-SUBREDDITS = (
-    # Professional organisers, where a platform complaint is on-topic
-    "eventprofs",
-    "eventplanning",
-    "EventProduction",
-    "festivalorganizers",
-    "events",
-    # Indian SME founders — the buyer, discussing tooling rather than events
-    "IndiaBusiness",
-    "StartUpIndia",
-    # Broad, kept last: with `restrict_sr` and a vendor-name query these still
-    # surface organisers, but they are the lowest-yield of the set.
-    "Entrepreneur",
-    "smallbusiness",
-)
-
-# Deliberately excluded — attendee communities, kept here so nobody adds them
-# back thinking they were an oversight.
-SUBREDDITS_WRONG_AUDIENCE = ("festivals", "aves", "Music", "India")
-
-# Reddit access, tested 2026-08-02 — cost $0.24 of the Apify budget to learn:
-#
-# 1. Direct, unauthenticated: blocked on every path from this VM.
-#    search.json 403, search.rss 200-but-empty, new.rss 429.
-# 2. Apify `trudax/reddit-scraper-lite` (pay-per-event, works on the free
-#    plan): runs fine but is **global-search only**. Both scoping methods
-#    return zero — `searchCommunityName` and a subreddit search `startUrls`.
-#    A global search for "eventbrite" returned 10 posts, 7 mentioning it, and
-#    **0 usable organiser complaints**: the hits were people *advertising*
-#    events on Eventbrite plus an unrelated scam warning.
-#
-# Conclusion: paying to scrape Reddit globally buys noise. The value is in
-# subreddit-scoped search, and only the official API can do that — which needs
-# the free OAuth app credentials the collector already expects. Do not spend
-# more Apify budget here.
-REDDIT_ACCESS_NOTE = "official API only; Apify global search yields no usable signal"
 
 # --------------------------------------------------------------- job postings
 #

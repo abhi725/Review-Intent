@@ -49,7 +49,6 @@ const SOURCE_LABEL = {
   capterra: "Capterra",
   google_news: "Google News",
   vendor_news: "Google News",
-  reddit: "Reddit",
   apify_jobs: "Job boards",
   trustradius: "TrustRadius",
   softwaresuggest: "SoftwareSuggest",

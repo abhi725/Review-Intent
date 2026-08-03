@@ -49,7 +49,7 @@ DEMO = [
                 "at the door is only doing the door.\n\nWhat does your event-day "
                 "call volume look like?",
         "signals": [
-            ("forum", "reddit", 3, 25, "Explara payouts held two weeks past the event; support unreachable."),
+            ("forum", "forum_demo", 3, 25, "Explara payouts held two weeks past the event; support unreachable."),
             ("install", "csv_import", 210, 30, "Explara registration widget on the events subdomain."),
         ],
     },

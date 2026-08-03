@@ -105,7 +105,6 @@ def registry() -> list[Collector]:
     from intentdesk.collectors.apify import CapterraReviewCollector, G2ReviewCollector
     from intentdesk.collectors.jobs import JobPostCollector
     from intentdesk.collectors.news import VendorNewsCollector
-    from intentdesk.collectors.reddit import RedditCollector
     from intentdesk.collectors.reviews_b2b import (
         SoftwareSuggestCollector,
         TrustRadiusCollector,
@@ -118,7 +117,6 @@ def registry() -> list[Collector]:
         VendorNewsCollector(),          # free
         SoftwareSuggestCollector(),     # free, unverified — Indian B2B reviews
         TrustRadiusCollector(),         # free, unverified
-        RedditCollector(),              # free, needs an OAuth app
         TrustpilotReviewCollector(),    # $0.05 per run of up to 20 reviews
         JobPostCollector(),             # ~$0.006 per listing
         G2ReviewCollector(),            # ~$0.06 per review
@@ -170,11 +168,13 @@ RETIRED: list[dict] = [
 # and so the price and the action name stay in one table — see services/spend.py.
 PRICED_ACTION: dict[str, str] = {
     "vendor_news": "collect_news",
-    "reddit": "collect_reddit",
     "trustpilot": "collect_trustpilot",
     "apify_g2": "collect_g2",
     "trustradius": "collect_b2b_reviews",
     "softwaresuggest": "collect_b2b_reviews",
+    # Was absent, so the Sources screen priced Capterra as "no price registered
+    # for this action" — an unpriced button on a source that bills per review.
+    "apify_capterra": "collect_apify_capterra",
 }
 
 

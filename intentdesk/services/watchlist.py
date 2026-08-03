@@ -1,6 +1,6 @@
 from intentdesk import db
 
-DEFAULT_SOURCES = ["tech", "jobs", "g2", "capterra", "reddit", "vendor_news"]
+DEFAULT_SOURCES = ["tech", "jobs", "g2", "capterra", "vendor_news"]
 
 
 async def list_all(active_only: bool = False) -> list[dict]:

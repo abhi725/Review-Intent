@@ -18,9 +18,11 @@ rating. Confirm the name matches the brand, then copy the line it prints into
 `market.B2B_REVIEW_SLUGS`. Nothing here writes to the database and nothing costs
 money.
 
-Expect 403s. Several review sites block this VM's datacenter IP, which is a real
-answer: it means the free route is closed for that site and only an actor with
-residential proxies would work, which is no longer free.
+This fetches through the **same residential proxy the collectors use**, because
+both sites answer this VM's datacenter IP with 403 — including on robots.txt. Run
+without the proxy configured and every candidate fails for that reason rather than
+because the slug is wrong, which is the one answer this script must not give. It
+says so on stderr instead of pretending the list was checked.
 """
 
 import asyncio
@@ -28,6 +30,7 @@ import sys
 
 import httpx
 
+from intentdesk.collectors import proxy
 from intentdesk.collectors.organisers import UA, robots_allows
 from intentdesk.collectors.reviews_b2b import (
     SoftwareSuggestCollector,
@@ -109,8 +112,20 @@ async def check_one(client: httpx.AsyncClient, site: str, brand: str,
 async def main() -> None:
     wanted = [a for a in sys.argv[1:] if a in SITES] or list(SITES)
 
+    # Same route the collectors use. Verifying a slug over the direct connection
+    # would 403 on every candidate and report the whole list as unverifiable —
+    # the block is on the IP, not the slug, so checking from here answers the
+    # wrong question.
+    proxy_url = proxy.url()
+    if proxy_url is None:
+        print(f"warning: no residential proxy configured — {proxy.NEEDS_PROXY}.\n"
+              f"Both sites 403 this host's datacenter IP, so every candidate below "
+              f"will fail for that reason rather than because the slug is wrong.\n",
+              file=sys.stderr)
+
     async with httpx.AsyncClient(
-        timeout=30, headers={"User-Agent": UA}, follow_redirects=True
+        timeout=30, headers={"User-Agent": UA}, follow_redirects=True,
+        proxy=proxy_url,
     ) as client:
         for site in wanted:
             candidates = B2B_SLUG_CANDIDATES.get(site, {})

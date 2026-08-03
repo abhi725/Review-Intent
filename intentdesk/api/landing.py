@@ -8,8 +8,9 @@ that paints the copy on the client is a page Google sees as empty.
 **The honesty rule for this file.** Every capability claim below is checked
 against `intentdesk/market.py`, which records what was tried and what failed.
 Capterra is 403-blocked on the current Apify plan, the Indeed job collector was
-tested against the live API and does not work, and Reddit needs OAuth
-credentials that do not exist yet. None of those may be described as working.
+tested against the live API and does not work. Neither may be described
+as working. Reddit was removed outright: the account cannot get API
+access, so a source that can never run is worse than no source at all.
 The status table in the signals section says so out loud, which is a stronger
 sales position than a logo wall and has the advantage of being true.
 

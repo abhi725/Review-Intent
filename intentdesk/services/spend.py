@@ -108,22 +108,29 @@ PRICES: dict[str, dict] = {
         "measured": True,
         "note": "Google News RSS, no key",
     },
-    "collect_reddit": {
-        "provider": "reddit",
-        "unit": "run",
-        "unit_usd": 0.0,
-        "measured": True,
-        "note": "official API on free OAuth credentials; the $0.17 Apify route "
-                "was retired for returning no usable signal",
-    },
     "collect_b2b_reviews": {
         "provider": "b2b_reviews",
         "unit": "run",
-        "unit_usd": 0.0,
-        "measured": True,
-        "note": "TrustRadius and SoftwareSuggest JSON-LD, parsed over plain HTTP "
-                "— no actor, no key. Free but unverified: neither has returned a "
-                "row from this host yet",
+        # Residential proxy bandwidth, not an actor fee. One product page of HTML
+        # is a few hundred KB and Apify bills residential traffic by the GB, so a
+        # run is fractions of a cent — but `measured: False`, because nothing has
+        # gone through this route yet and a made-up figure that renders as
+        # measured is worse than one that admits it is an estimate.
+        "unit_usd": 0.005,
+        "measured": False,
+        "note": "TrustRadius and SoftwareSuggest JSON-LD via the Apify residential "
+                "proxy — estimate only, no run has completed on this route yet",
+    },
+    "collect_apify_capterra": {
+        "provider": "apify_capterra",
+        "unit": "review fetched",
+        # gio21's actor is pay-per-event and the run also spends residential
+        # bandwidth. Unmeasured for the same reason as above: every attempt so far
+        # was answered with 403 before any review was returned.
+        "unit_usd": 0.02,
+        "measured": False,
+        "note": "gio21~capterra-reviews-scraper on residential proxy — estimate "
+                "only; every previous attempt was 403'd before returning a review",
     },
     "enrich_company": {
         "provider": "apollo_org",

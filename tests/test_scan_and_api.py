@@ -61,7 +61,7 @@ class StubCollector(Collector):
     # does: a collector that has not said it is free is assumed to bill, so a new
     # paid source cannot slip onto the cron by omission. A stub that wants to be
     # free has to say so, which is what `requires=()` used to imply and no longer
-    # does — Reddit needs credentials and costs nothing.
+    # does — a source can need credentials and still cost nothing.
     def __init__(self, name, *, requires=(), broken="", results=None, raises=None,
                  cost=0.0, cost_model="per_run", cadence="on_demand"):
         self.name = name
@@ -139,7 +139,7 @@ def test_paid_collectors_are_skipped_once_the_cap_is_reached(fake_db, monkeypatc
 def test_missing_credentials_are_named_in_the_skip_reason(fake_db, monkeypatch):
     fake_db(**{"FROM watchlist": [{"competitor": "Eventbrite"}]})
     monkeypatch.setattr(
-        scan, "registry", lambda: [StubCollector("reddit", requires=("reddit_client_id",))]
+        scan, "registry", lambda: [StubCollector("needs_key", requires=("some_api_key",))]
     )
     monkeypatch.setattr(scan.preferences, "all_prefs",
                         lambda: _async({"monthly_spend_cap_usd": 5}))
@@ -147,7 +147,7 @@ def test_missing_credentials_are_named_in_the_skip_reason(fake_db, monkeypatch):
                                                              "leads_created": 0}))
 
     result = asyncio.run(scan.run())
-    assert "reddit_client_id" in result["collectors_skipped"][0]["reason"]
+    assert "some_api_key" in result["collectors_skipped"][0]["reason"]
 
 
 # ---------------------------------------------------------------- contactability

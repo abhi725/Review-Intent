@@ -1188,6 +1188,31 @@ async def cron_alerts():
     return await monitoring.alerts()
 
 
+@cron.get("/leads")
+async def cron_leads(
+    status: Optional[str] = None,
+    heat: Optional[str] = None,
+    limit: int = Query(500, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Leads as flat JSON rows, for the Google Sheets sync.
+
+    On the cron router rather than `/api` because the caller is n8n, which has no
+    browser session — every `/api/*` route is cookie-gated, which is why a
+    scheduled spreadsheet sync had nowhere to read from. Free and read-only: it
+    returns stored rows and collects nothing, so it belongs on a schedule by the
+    same rule that puts `/discover` there.
+
+    Paged deliberately. See `export.leads_for_sheet` — Cloudflare kills a request
+    at ~100s and reports the failure as a failed node.
+    """
+    from intentdesk.services import export
+
+    return await export.leads_for_sheet(
+        status=status, heat=heat, limit=limit, offset=offset
+    )
+
+
 @cron.post("/reconcile")
 async def cron_reconcile():
     return await monitoring.reconcile_spend()

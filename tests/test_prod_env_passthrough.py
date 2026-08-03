@@ -38,7 +38,6 @@ NOT_IN_PROD = {
     "API_PORT",           # set by the image's CMD
     "MCP_HTTP_PORT",      # the MCP app is mounted, not run on its own port
     "BUILTWITH_API_KEY",  # $295/mo, never bought; organizations/enrich replaced it
-    "REDDIT_USER_AGENT",  # code default is correct and not a secret
     # Targeting/scoring knobs: the code defaults are the intended production
     # values, and passing them as empty strings would override those defaults
     # with nothing — the exact bug this file exists to catch, inverted.

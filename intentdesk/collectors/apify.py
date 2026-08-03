@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from intentdesk.collectors import Collector, RawSignal
+from intentdesk.collectors import proxy
 from intentdesk.config import settings
 
 API = "https://api.apify.com/v2"
@@ -177,19 +178,38 @@ class CapterraReviewCollector(Collector):
     kind = "review"
     requires = ("apify_token",)
     actor = "gio21~capterra-reviews-scraper"
-    known_broken = (
-        "Capterra returns 403 to this actor; it needs residential proxies, "
-        "which the free Apify plan does not include"
-    )
 
     def __init__(self, max_items: int = 20):
         self.max_items = max_items
         self.last_cost_usd = 0.0
 
+    @property
+    def known_broken(self):
+        """Blocked only while there is no residential proxy to route through.
+
+        A property rather than a class constant because this is now a
+        configuration question, not a permanent fact about the source. The 403 is
+        real and was measured, but it is a datacenter-IP 403 — the actor works
+        from a residential exit, which is exactly what the paid plan buys.
+        """
+        if proxy.enabled():
+            return None
+        return f"Capterra returns 403 to this actor's datacenter proxies — {proxy.NEEDS_PROXY}"
+
     async def collect(self, competitor: str) -> list[RawSignal]:
-        items, cost = await ApifyRunner(settings.apify_token).run(
-            self.actor, {"query": competitor, "maxItems": self.max_items}
-        )
+        payload = {"query": competitor, "maxItems": self.max_items}
+        # Residential exit, or nothing: without it Capterra 403s and the actor
+        # still exits SUCCEEDED, which bills for a run that returned no reviews.
+        config = proxy.actor_configuration()
+        if config is None:
+            raise RuntimeError(
+                f"refusing to run {self.actor} without a residential proxy — "
+                f"{proxy.NEEDS_PROXY}. The actor would bill for a run that "
+                f"Capterra answers with 403."
+            )
+        payload["proxyConfiguration"] = config
+
+        items, cost = await ApifyRunner(settings.apify_token).run(self.actor, payload)
         self.last_cost_usd = cost
 
         # Verified 2026-08-01: Capterra returns 403 to this actor's datacenter

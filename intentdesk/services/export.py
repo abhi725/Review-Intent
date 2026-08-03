@@ -248,6 +248,57 @@ def _flat(value):
     return value
 
 
+# The key column for a spreadsheet sync. Google Sheets' "append or update" needs
+# one column that identifies a row for its lifetime, so a re-run updates the lead
+# in place instead of appending a second copy of it every time.
+SHEET_KEY = "id"
+
+
+async def leads_for_sheet(
+    status: Optional[str] = None,
+    heat: Optional[str] = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict:
+    """Leads as flat rows for a spreadsheet sync, one page at a time.
+
+    Paged rather than all-at-once because the caller is a scheduled HTTP client
+    behind Cloudflare, which kills a request at about 100 seconds — a full export
+    that times out is reported as a failed run even when the work succeeded.
+    `has_more` is what lets the workflow decide to ask for the next page instead
+    of guessing from the row count.
+
+    Values are flattened to strings, numbers and booleans only. A nested object
+    reaches Sheets as the text "[object Object]", which is a column of noise that
+    looks like data.
+    """
+    rows = await leads.list_leads(heat=heat, status=status, limit=limit, offset=offset)
+
+    out = []
+    for row in rows:
+        flat = {SHEET_KEY: row.get("id")}
+        for key, header in COLUMNS:
+            value = row.get(key)
+            if isinstance(value, (dict, list)):
+                # `chips` is the only one today, and a joined string is genuinely
+                # more useful in a cell than a dropped column.
+                value = ", ".join(str(v) for v in value) if isinstance(value, list) else ""
+            flat[header] = "" if value is None else value
+        created = row.get("created_at")
+        flat["Created"] = created.isoformat() if hasattr(created, "isoformat") else (created or "")
+        out.append(flat)
+
+    return {
+        "rows": out,
+        "count": len(out),
+        "offset": offset,
+        "limit": limit,
+        # `list_leads` clamps its own limit, so a short page is the only reliable
+        # end-of-data signal.
+        "has_more": len(rows) == limit,
+    }
+
+
 async def reviews_csv(
     since: Optional[datetime] = None,
     until: Optional[datetime] = None,

@@ -1,4 +1,4 @@
-"""TrustRadius and SoftwareSuggest — free B2B review sources, direct HTTP.
+"""TrustRadius and SoftwareSuggest — B2B review sources, via residential proxy.
 
 Why these two and not more of Gartner's estate: GetApp, Capterra and Software
 Advice share one data pool and one blocking policy, and Capterra already returns
@@ -8,8 +8,14 @@ Indian ticketing platforms with no G2 footprint at all (Townscript, Explara,
 MeraEvents) are exactly the brands an Indian review site would carry.
 
 Both publish `schema.org/Review` as JSON-LD for their own SEO, which is why this
-needs no scraping actor and no credit. It parses the structured data these pages
-already hand to crawlers.
+needs no scraping actor. It parses the structured data these pages already hand
+to crawlers.
+
+What it does need is a **residential exit**. Both sites answer this VM's
+datacenter IP with 403 — on robots.txt itself — so the free direct route is
+closed and the fetch goes through the Apify residential proxy instead. That
+bandwidth is billed, which is why these are `on_demand` and `per_run` rather
+than the free scheduled sources they were written as. See `proxy.py`.
 
 Two things are enforced rather than assumed, both matching the pattern the rest of
 this package uses:
@@ -40,6 +46,7 @@ from typing import Optional
 import httpx
 
 from intentdesk.collectors import Collector, RawSignal
+from intentdesk.collectors import proxy
 from intentdesk.collectors.organisers import UA, robots_allows
 from intentdesk.market import B2B_REVIEW_SLUGS
 
@@ -148,27 +155,37 @@ class _JsonLdReviewCollector(Collector):
     """Shared machinery. Subclasses supply the site's base URL and path shape."""
 
     kind = "review"
-    requires = ()          # free: no key, no actor
-    cadence = "scheduled"  # free, so it may run on the cron
-    cost_model = "free"
+    requires = ()
+
+    # Both sites 403 this VM's datacenter IP, so the only route that works is the
+    # residential proxy — and residential bandwidth is billed. That makes these
+    # paid, on-demand sources: there is no longer a free route to run on a cron,
+    # and a paid source on a schedule is the spending pattern this design exists
+    # to prevent. Declared as constants rather than switching with the proxy flag,
+    # because a source whose cadence changes with configuration is one that could
+    # quietly land back on the free scan.
+    cadence = "on_demand"
+    cost_model = "per_run"
 
     # Never returned a row on this box. Reported rather than hidden: a source
     # claiming READY when it has never worked is the failure this package's
     # `availability()` exists to prevent.
     verified = False
 
-    # Tested 2026-08-03 and closed. Both sites 403 their own robots.txt from this
-    # VM, and `robots_allows()` treats that as a refusal — reading past it would be
-    # helping ourselves to something the site declined to describe.
-    #
-    # Set as `known_broken` rather than deleting the collectors: the parsing is
-    # correct against the documented JSON-LD shape and becomes usable the day this
-    # runs behind a residential proxy. Deleting it would mean rediscovering both
-    # the shape and the block.
-    known_broken = (
-        "403 on robots.txt from this host — the free HTTP route is closed. Needs "
-        "an actor with residential proxies, which is no longer free."
-    )
+    @property
+    def known_broken(self):
+        """Blocked while there is no residential proxy, and only then.
+
+        Tested 2026-08-03: both sites 403 their own robots.txt from this VM, and
+        `robots_allows()` treats that as a refusal — reading past it would be
+        helping ourselves to something the site declined to describe. That is a
+        datacenter-IP 403, not a policy against us, so a residential exit is the
+        fix. The parsing is correct against the documented JSON-LD shape, which is
+        why this was kept rather than deleted.
+        """
+        if proxy.enabled():
+            return None
+        return f"403 on robots.txt from this host's datacenter IP — {proxy.NEEDS_PROXY}"
 
     base: str = ""
     site: str = ""
@@ -218,8 +235,18 @@ class _JsonLdReviewCollector(Collector):
         slug = B2B_REVIEW_SLUGS[self.site][competitor.strip().lower()]
         path = self.path_template.format(slug=slug)
 
+        # The proxy is the whole reason this can run at all, so its absence is an
+        # error rather than a fall-back to the direct route that is known to 403.
+        proxy_url = proxy.url()
+        if proxy_url is None:
+            raise RuntimeError(f"{self.site} needs a residential exit — {proxy.NEEDS_PROXY}")
+
         async with httpx.AsyncClient(
-            timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True
+            timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True,
+            # robots.txt is fetched through the proxy too. It has to be: the 403
+            # that blocks this source is on robots.txt itself, so checking it from
+            # the datacenter IP would refuse the crawl before the proxy was used.
+            proxy=proxy_url,
         ) as client:
             if not await robots_allows(client, self.base, path):
                 self.last_skip_reason = (
@@ -237,10 +264,11 @@ class _JsonLdReviewCollector(Collector):
 
             if page.status_code == 403:
                 raise RuntimeError(
-                    f"{self.site} returned 403 to this host. Direct HTTP from this "
-                    f"VM's datacenter IP is blocked by several review sites; an "
-                    f"actor with residential proxies would be needed, which is no "
-                    f"longer free."
+                    f"{self.site} returned 403 through the residential proxy. The "
+                    f"datacenter-IP block was the expected cause and this route is "
+                    f"meant to clear it, so a 403 here means either the proxy exit "
+                    f"is itself listed or the site is refusing this path outright — "
+                    f"worth checking before spending more bandwidth on retries."
                 )
             if page.status_code != 200:
                 raise RuntimeError(f"{self.site} returned {page.status_code} for {path}")

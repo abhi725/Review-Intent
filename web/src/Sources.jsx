@@ -6,7 +6,6 @@ import { api } from "./api.js";
 // a variable dump.
 const SOURCE_LABEL = {
   vendor_news: "Google News",
-  reddit: "Reddit",
   trustpilot: "Trustpilot",
   apify_g2: "G2",
   apify_capterra: "Capterra",

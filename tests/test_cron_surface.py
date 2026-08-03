@@ -30,6 +30,7 @@ SCHEDULABLE = {
     "/reconcile", # reads Apify's own spend figure
     "/alerts",
     "/digest",
+    "/leads",     # read-only: returns stored rows for the Sheets sync, collects nothing
 }
 
 # Priced per row or per run. These stay behind an admin session and a button

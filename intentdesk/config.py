@@ -62,9 +62,16 @@ class Settings(BaseSettings):
     builtwith_api_key: str = ""
     apify_token: str = ""
     apollo_api_key: str = ""
-    reddit_client_id: str = ""
-    reddit_client_secret: str = ""
-    reddit_user_agent: str = "swan-intent-desk/0.1"
+
+    # Apify residential proxy. Needs a PAID Apify plan — measured 2026-08-03, a
+    # free account authenticates and then gets 403 on every proxy group, so this
+    # cannot be switched on by accident and cannot be tested without the upgrade.
+    # Off by default because turning it on is what makes Capterra, TrustRadius
+    # and SoftwareSuggest billable instead of blocked.
+    apify_residential_proxy: bool = False
+    # NOT the API token: Apify issues a separate proxy password, readable at
+    # GET /v2/users/me -> data.proxy.password. Using the token gets 407.
+    apify_proxy_password: str = ""
 
     @property
     def is_dev(self) -> bool:

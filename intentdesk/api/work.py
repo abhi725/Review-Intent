@@ -53,7 +53,8 @@ _CSS = """
   --search:#14635c; --answer:#8a5d12; --generative:#8c3a50;
   --search-bg:#e6efed; --answer-bg:#f5eddd; --generative-bg:#f6e8ec;
   --ok:#2f6b3c; --warn:#8a5d12; --stop:#8c2f2f;
-  --measure:68ch;
+  --measure:72ch;
+  --gut:26px;
 }
 @media (prefers-color-scheme:dark){
   :root{
@@ -108,10 +109,15 @@ body{
 .top nav a[aria-current=page]{color:var(--ink);font-weight:600;background:var(--paper)}
 
 /* ------------------------------------------------------------------ layout */
-.page{max-width:1180px;margin:0 auto;padding:0 26px 90px;
-  display:grid;grid-template-columns:1fr;gap:0}
+.page{max-width:1180px;margin:0 auto;padding:0 var(--gut) 90px;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:0}
 @media (min-width:1040px){
-  .page{grid-template-columns:210px minmax(0,1fr);gap:48px;padding-top:8px}
+  /* The rail is a fixed 210px and the column beside it is capped at the reading
+     measure, so `justify-content:center` is what stops the pair sitting hard left
+     with a wide dead margin on a large monitor. Without it the composition reads
+     as broken rather than as a deliberate narrow column. */
+  .page{grid-template-columns:210px minmax(0,var(--measure));gap:48px;
+    padding-top:8px;justify-content:center}
   .rail{display:block}
 }
 .rail{display:none;position:sticky;top:74px;align-self:start;
@@ -168,14 +174,33 @@ code{background:var(--raise);border:1px solid var(--line-soft);
 .chip.reasoned{color:var(--muted)}
 
 /* ------------------------------------------------------------------ tables */
+/* Scrollable tables carry their own edge shadow, which appears only while there
+   is more to scroll to. A table that silently overflows on a phone is a table the
+   reader never knows it is missing half of — the affordance is the fix, not a
+   smaller font. `background-attachment: local` pins the covers to the content and
+   `scroll` pins the shadows to the frame; that difference is what makes them
+   self-hiding. */
 .scroll{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);
-  border-radius:9px;background:var(--raise)}
-table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+  border-radius:9px;background-color:var(--raise);
+  background-image:
+    linear-gradient(to right,var(--raise) 30%,rgba(0,0,0,0)),
+    linear-gradient(to left,var(--raise) 30%,rgba(0,0,0,0)),
+    radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.13),rgba(0,0,0,0)),
+    radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.13),rgba(0,0,0,0));
+  background-position:left center,right center,left center,right center;
+  background-repeat:no-repeat;
+  background-size:34px 100%,34px 100%,13px 100%,13px 100%;
+  background-attachment:local,local,scroll,scroll;
+  overscroll-behavior-x:contain}
+/* No blanket min-width. Cells wrap instead, so a two-column table fits a phone
+   with no scrolling at all and only genuinely wide ones scroll. */
+table{border-collapse:collapse;width:100%;font-size:14.5px}
 th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line-soft);
-  vertical-align:top}
+  vertical-align:top;hyphens:auto}
 th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--muted);font-weight:650;white-space:nowrap;
+  color:var(--muted);font-weight:650;
   background:var(--paper)}
+@media (min-width:700px){th{white-space:nowrap}}
 tr:last-child td{border-bottom:0}
 td.num,th.num{font-family:ui-monospace,Menlo,monospace;
   font-variant-numeric:tabular-nums}
@@ -234,7 +259,46 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--search);
   animation:none!important;scroll-behavior:auto!important}}
 html{scroll-behavior:smooth}
 :target{scroll-margin-top:86px}
-@media print{.top,.rail,.next{display:none}body{font-size:11pt}}
+/* ------------------------------------------------------------ small screens */
+/* Written as a max-width block rather than by lowering the base, because the
+   desktop reading experience is the one the type scale was set for. */
+@media (max-width:639px){
+  :root{--gut:16px}
+  body{font-size:16px;line-height:1.62}
+  .top-in{padding:11px var(--gut);gap:10px}
+  .who{font-size:14px;width:100%}
+  .who span{display:none}
+  .top nav{margin-left:0;width:100%;gap:6px}
+  .top nav a{font-size:12.5px;padding:6px 10px;background:var(--paper)}
+
+  h1{font-size:28px;margin:26px 0 10px}
+  h2{font-size:22px;margin:40px 0 6px;padding-top:20px}
+  h3{font-size:17.5px;margin:26px 0 6px}
+  .lede{font-size:17.5px}
+
+  /* The formula is the one block that must not be cut off — it is the answer to
+     "show the prioritisation logic". Wrapping beats scrolling here, because a
+     reader who does not notice the scroll sees a divided-by with no divisor. */
+  .formula{white-space:pre-wrap;word-break:break-word;font-size:12.5px;
+    padding:16px 15px;line-height:1.9}
+
+  table{font-size:13.5px}
+  th,td{padding:9px 10px}
+  .card,.layer{padding:15px 16px}
+  .layer{grid-template-columns:auto minmax(0,1fr);gap:12px}
+  .stat b{font-size:21px}
+  .next a{width:100%}
+  :target{scroll-margin-top:112px}
+}
+/* Between phone and desktop the rail is still hidden, so give the column back
+   the space it would have used. */
+@media (min-width:640px) and (max-width:1039px){
+  .page{max-width:760px}
+}
+
+@media print{.top,.rail,.next{display:none}body{font-size:11pt}
+  .scroll{background-image:none;overflow:visible}
+  h2{break-after:avoid}.layer,.card{break-inside:avoid}}
 """
 
 

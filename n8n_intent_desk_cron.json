@@ -28,7 +28,7 @@
         "url": "https://intent.swandigitals.com/cron/discover",
         "sendQuery": true,
         "queryParameters": {
-          "parameters": [{ "name": "limit", "value": "500" }]
+          "parameters": [{ "name": "limit", "value": "100" }]
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -51,7 +51,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-580, 300],
-      "notes": "Walks the MeraEvents organiser sitemap — a plain fetch, no actor and no credits, which is why it runs here rather than on a button. 500 a week against 7,273 known profiles. Turning a *name* into a domain is the part that bills, and that stays at POST /api/resolve behind an admin session."
+      "notes": "Walks the Eventbrite and MeraEvents organiser sitemaps — a plain fetch, no actor and no credits, which is why it runs here rather than on a button. Turning a *name* into a domain is the part that bills, and that stays at POST /api/resolve behind an admin session.\n\nlimit is 100, and the ceiling is Cloudflare rather than the server: MeraEvents needs one page fetch per profile, so limit=50 measured 28s and limit=400 exceeded Cloudflare's ~100s edge timeout — the request returned empty while the run carried on to completion server-side. That failure mode is the bad one, because n8n logs a failed node for work that actually succeeded. Raise this only against POST /api/discover, which is not behind the proxy timeout in the same way."
     },
     {
       "parameters": {

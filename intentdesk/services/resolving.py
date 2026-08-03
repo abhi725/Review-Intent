@@ -62,8 +62,27 @@ def name_similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
+def is_india(country_code: Optional[str], country_name: Optional[str]) -> Optional[bool]:
+    """True, False, or None for "nobody told us" — three states, not two.
+
+    Collapsing the last two is what let a Dutch company through as an Indian
+    lead. GMB returns a real ISO code; Apollo returns a country *name*, and the
+    old code turned that into `"IN" if name == "India" else None`, so
+    "Netherlands" and "unknown" became the same value and the India check below
+    could never fire on an Apollo hit.
+    """
+    code = (country_code or "").strip().upper()
+    name = (country_name or "").strip().lower()
+    if code == "IN" or name == "india":
+        return True
+    if code or name:
+        return False
+    return None
+
+
 def score(discovered: str, matched: str, domain: Optional[str],
-          country_code: Optional[str], wrong_kind: bool = False) -> str:
+          country_code: Optional[str], wrong_kind: bool = False,
+          country_name: Optional[str] = None) -> str:
     """high -> promote automatically. medium -> hold. low -> do not spend more.
 
     A domain is required for `high` at all: without one there is nothing to
@@ -90,9 +109,12 @@ def score(discovered: str, matched: str, domain: Optional[str],
     in_domain = any(t in stem for t in strong)
 
     if sim >= 0.6 or name_is_the_domain:
-        # India-first product. A non-IN match on an Indian organiser is more
-        # likely a same-name company elsewhere than the business we want.
-        if country_code and country_code.upper() not in ("IN", ""):
+        # India-first product. A confirmed non-Indian match is more likely a
+        # same-name company elsewhere than the business we want, so it is held
+        # for review rather than promoted. An *unknown* country still promotes —
+        # most of the queue has no country until enrichment runs, and refusing
+        # those would stall the pipeline on missing data rather than on evidence.
+        if is_india(country_code, country_name) is False:
             return "medium"
         return "high"
     if sim >= 0.34 or in_domain:
@@ -139,6 +161,10 @@ async def apollo_search(name: str) -> Optional[dict]:
         "domain": domain_of(best.get("website_url")) or best.get("primary_domain"),
         "phone": best.get("phone"),
         "city": best.get("city"),
+        # Both, and neither invented. Apollo reports a country *name*; keeping it
+        # verbatim alongside the code is what lets `is_india` tell "Netherlands"
+        # apart from "we don't know".
+        "country_name": best.get("country"),
         "country_code": "IN" if (best.get("country") or "") == "India" else None,
         "category": best.get("industry"),
         "employees": best.get("estimated_num_employees"),
@@ -154,12 +180,30 @@ async def resolve_batch(limit: int = 25, use_gmb: bool = True) -> dict:
     free-tier rate limit is untested, and a run that dies half way must not
     have to start again. Every row is marked before the next batch begins.
     """
+    # Evidence first, then oldest first.
+    #
+    # Plain `ORDER BY discovered_at` spends the budget in discovery order, which
+    # is the wrong order once more than one platform is being discovered: ~1,700
+    # MeraEvents organisers were found before the first Eventbrite one, and
+    # MeraEvents is the platform with no G2 page, no verified Trustpilot page and
+    # therefore no classified complaint. Every one of those rows resolves to a
+    # company whose best possible draft is the generic pitch, and the platform we
+    # hold 26 classified complaints about would have been reached last.
+    #
+    # So a pending organiser sorts first when we already hold classified
+    # complaints about the platform it runs. Same cost per row, but the rows that
+    # can reach a pattern-based draft are the ones that get paid for.
     pending = await db.fetch(
         """
-        SELECT id, name, platform, source, city, profile_url
-        FROM organisers
-        WHERE status = 'pending'
-        ORDER BY discovered_at
+        SELECT o.id, o.name, o.platform, o.source, o.city, o.profile_url
+        FROM organisers o
+        WHERE o.status = 'pending'
+        ORDER BY
+            (o.platform IN (
+                SELECT DISTINCT platform FROM signals
+                WHERE category IS NOT NULL AND platform IS NOT NULL
+            )) DESC,
+            o.discovered_at
         LIMIT $1
         """,
         limit,
@@ -217,6 +261,20 @@ async def resolve_batch(limit: int = 25, use_gmb: bool = True) -> dict:
         confidence = score(
             row["name"], hit.get("matched_name") or "", hit.get("domain"),
             hit.get("country_code"), hit.get("wrong_kind", False),
+            country_name=hit.get("country_name"),
+        )
+
+        # What the resolver actually saw, or nothing. Hardcoding "IN" here was
+        # true while MeraEvents was the only source — every organiser on an
+        # Indian platform's sitemap is Indian by construction — and became false
+        # the moment Eventbrite was added: "Replay Events" (Milton Keynes) and
+        # "The Green Light" (tgd-light.nl, Roosendaal) were both stored as IN.
+        # A wrong country is worse than a missing one, because the whole product
+        # is aimed at one country and nothing downstream re-checks the claim.
+        observed_country = (
+            (hit.get("country_code") or "").strip().upper()
+            or (hit.get("country_name") or "").strip()
+            or None
         )
 
         company_id = None
@@ -226,7 +284,7 @@ async def resolve_batch(limit: int = 25, use_gmb: bool = True) -> dict:
                 domain=hit["domain"],
                 vendor=row["platform"],
                 city=hit.get("city") or row["city"],
-                country="IN",
+                country=observed_country,
             )
             company_id = company["id"]
             # Phone is the whole point on this channel; write it if we have one
@@ -260,7 +318,7 @@ async def resolve_batch(limit: int = 25, use_gmb: bool = True) -> dict:
                 url=row["profile_url"],
                 platform=row["platform"],
                 source_site=row["source"],
-                country="India",
+                country=observed_country,
             )
             stats["promoted"] += 1
 

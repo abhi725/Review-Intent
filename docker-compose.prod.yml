@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.7.0
+    image: swan-intent-api:0.9.0
     container_name: swan-intent-api
     restart: unless-stopped
     environment:
@@ -33,6 +33,17 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
       APIFY_TOKEN: ${APIFY_TOKEN:-}
+      # --- enrichment ---
+      # This was set in .env.prod and missing here for a day, which is the worst
+      # version of this bug: `organizations/enrich` and the domain resolver both
+      # report a missing key as *no result*, so prod looked like "Apollo found
+      # nothing for these companies" while it had never been asked. Nothing
+      # errored and no alert fired.
+      APOLLO_API_KEY: ${APOLLO_API_KEY:-}
+      # Free, and pre-wired so that supplying them is a one-line .env.prod edit
+      # rather than a rediscovery of this same allow-list.
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
       # --- outbound mail ---
       # `:?` rather than a default, deliberately. Every verification and
       # password-reset link is built from this; the config default is

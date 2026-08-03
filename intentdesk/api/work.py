@@ -213,11 +213,20 @@ code{background:var(--raise);border:1px solid var(--line-soft);
   background-size:34px 100%,34px 100%,13px 100%,13px 100%;
   background-attachment:local,local,scroll,scroll;
   overscroll-behavior-x:contain}
-/* No blanket min-width. Cells wrap instead, so a two-column table fits a phone
-   with no scrolling at all and only genuinely wide ones scroll. */
+/* A minimum per COLUMN, not per table. A single `min-width` on the table was
+   wrong in one direction — a two-column table scrolled on a phone for no reason —
+   and removing it was wrong in the other, which is worse: with nothing holding a
+   column open, a six-column table squeezes every cell to ~120px and the text
+   stacks one word per line, so each row becomes a tower. Sizing per column makes
+   the table's own minimum scale with how many columns it has: two columns need
+   ~250px, six need ~750px, and the container scrolls only when the space really
+   is not there. */
 table{border-collapse:collapse;width:100%;font-size:14.5px}
 th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line-soft);
-  vertical-align:top;hyphens:auto}
+  vertical-align:top;min-width:7.5rem}
+/* The label column and numeric columns carry short strings and do not need it. */
+th:first-child,td:first-child{min-width:6rem}
+td.num,th.num{min-width:4rem}
 th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);font-weight:650;
   background:var(--paper)}
@@ -345,7 +354,8 @@ details[open] > summary h2{color:var(--ink)}
     padding:16px 15px;line-height:1.9}
 
   table{font-size:13.5px}
-  th,td{padding:9px 10px}
+  th,td{padding:9px 10px;min-width:6.5rem}
+  th:first-child,td:first-child{min-width:5rem}
   .card,.layer{padding:15px 16px}
   .layer{grid-template-columns:auto minmax(0,1fr);gap:12px}
   .stat b{font-size:21px}

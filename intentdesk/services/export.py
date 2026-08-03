@@ -10,10 +10,12 @@ stays on the roadmap. Nothing about the workflow has to wait for it.
 """
 
 import csv
+import hmac
 import io
 from datetime import datetime, timezone
 from typing import Optional
 
+from intentdesk.config import settings
 from intentdesk.services import leads, signals
 
 
@@ -91,7 +93,17 @@ def _value(row: dict, key: str):
     return "" if v is None else v
 
 
-async def leads_csv(status: Optional[str] = None, heat: Optional[str] = None) -> str:
+async def leads_csv(status: Optional[str] = None, heat: Optional[str] = None,
+                    bom: bool = True) -> str:
+    """The lead queue as CSV.
+
+    `bom` exists because the two consumers want opposite things. A browser
+    download is most likely to be opened in Excel, which needs the byte-order
+    mark (see below). Google Sheets' IMPORTDATA fetches the raw text and puts the
+    first line straight into cells, so a BOM there becomes an invisible character
+    on the front of the first column heading — a header that looks right, does not
+    compare equal to "Company", and is invisible when you go looking for why.
+    """
     rows = await _all_rows(status=status, heat=heat)
     if not rows:
         raise NothingToExport(_nothing_reason(status, heat))
@@ -103,10 +115,9 @@ async def leads_csv(status: Optional[str] = None, heat: Optional[str] = None) ->
         writer.writerow([_value(row, key) for key, _ in COLUMNS])
 
     # UTF-8 BOM. Excel on Windows reads a BOM-less UTF-8 CSV as the system code
-    # page and turns every non-ASCII company name into mojibake; Sheets ignores
-    # the BOM entirely. One character, and it fixes the platform this is most
-    # likely to be opened on.
-    return "﻿" + buf.getvalue()
+    # page and turns every non-ASCII company name into mojibake. One character,
+    # and it fixes the platform a download is most likely to be opened on.
+    return ("﻿" if bom else "") + buf.getvalue()
 
 
 async def leads_xlsx(status: Optional[str] = None, heat: Optional[str] = None) -> bytes:
@@ -246,6 +257,36 @@ def _flat(value):
     if isinstance(value, float):
         return round(value, 2)
     return value
+
+
+# Minimum length for the public-export secret. It is the only thing standing
+# between the lead queue and the open internet, so it is checked rather than
+# trusted: a short token would be brute-forceable against a path that returns
+# 404 for wrong guesses and 200 for the right one.
+EXPORT_TOKEN_MIN_LEN = 24
+
+
+def sheet_export_enabled() -> bool:
+    """Whether the public CSV path exists at all.
+
+    False unless a token of a sane length is configured. A public route that
+    exposes leads must be switched on deliberately, and a one-character token is
+    the same as no token.
+    """
+    token = settings.sheet_export_token or ""
+    return len(token) >= EXPORT_TOKEN_MIN_LEN
+
+
+def sheet_export_token_ok(candidate: str) -> bool:
+    """Constant-time comparison against the configured token.
+
+    `compare_digest` rather than `==`: the timing of a string comparison leaks how
+    much of the prefix matched, which turns guessing the token from infeasible
+    into a few thousand requests.
+    """
+    if not sheet_export_enabled():
+        return False
+    return hmac.compare_digest(candidate or "", settings.sheet_export_token)
 
 
 # The key column for a spreadsheet sync. Google Sheets' "append or update" needs

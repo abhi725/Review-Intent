@@ -132,6 +132,81 @@ async def app_shell():
     return FileResponse(index)
 
 
+async def _public_leads_csv(token: str, cacheable: bool):
+    """Shared body for the two public CSV paths. See `public_leads_csv`."""
+    from intentdesk.services import export
+
+    # 404 rather than 401/403 for both "switched off" and "wrong token". A 403
+    # would confirm that a valid URL of this shape exists and that the guess was
+    # merely wrong, which is exactly the signal a guesser wants.
+    if not export.sheet_export_token_ok(token):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # No BOM: this is read by IMPORTDATA, which would put it inside the first
+    # column heading. The browser download keeps its BOM for Excel's sake.
+    body = await export.leads_csv(bom=False)
+    return PlainTextResponse(
+        body,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            # Belt and braces with robots.txt: a Disallow asks a crawler not to
+            # fetch, while this tells anything that did fetch not to index.
+            "X-Robots-Tag": "noindex, nofollow",
+            # On the extensionless path, ask for no caching at all. Cloudflare
+            # treats that route as dynamic, so what we send is what applies, and a
+            # rotated token or a new lead should be visible immediately.
+            "Cache-Control": ("public, max-age=300" if cacheable
+                              else "no-store, max-age=0"),
+        },
+    )
+
+
+@app.get("/export/leads/{token}", response_class=PlainTextResponse)
+async def public_leads_csv_nocache(token: str):
+    """The path to actually use. Same data as the `.csv` one, without the cache.
+
+    **Cloudflare caches by file extension**, measured 2026-08-03: the `.csv` URL
+    came back with `max-age=14400` — Cloudflare rewriting our `max-age=300` — while
+    an extensionless route under the same hostname is `cf-cache-status: DYNAMIC`
+    and not cached at all. Four hours of staleness on a lead feed is bad on its own
+    and worse for rotation, because a revoked token would keep serving from the
+    edge after it stopped being valid at the origin.
+
+    IMPORTDATA does not need the extension; it parses on content, and the response
+    is `text/csv`. The `.csv` route is kept only as a fallback in case a particular
+    Sheets version disagrees.
+    """
+    return await _public_leads_csv(token, cacheable=False)
+
+
+@app.get("/export/leads-{token}.csv", response_class=PlainTextResponse)
+async def public_leads_csv(token: str):
+    """The lead queue as CSV, for Google Sheets' IMPORTDATA. **Unauthenticated.**
+
+    This is the one deliberately public data path in the application, and it earns
+    that by being the only thing that works: IMPORTDATA cannot send an
+    Authorization header, so a bearer-token route is unreachable from a
+    spreadsheet formula. The secret therefore lives in the URL, and **anyone
+    holding the URL can read the lead queue** — company names, domains, phones and
+    the drafted outreach. That was accepted explicitly as the trade-off for a
+    one-formula setup after the OAuth, service-account and Apps Script routes all
+    failed.
+
+    What it does *not* do is pretend otherwise. It is off unless a token of at
+    least 24 characters is configured, a wrong token is indistinguishable from a
+    route that does not exist, and the comparison is constant-time so the token
+    cannot be guessed a character at a time. Rotate by changing
+    SHEET_EXPORT_TOKEN and re-pasting the formula; the old URL dies immediately.
+
+    Registered before the StaticFiles catch-all at "/", or the mount would swallow
+    it.
+
+    Prefer `/export/leads/{token}`: Cloudflare caches this one for four hours
+    because of the `.csv` extension, regardless of what we ask for.
+    """
+    return await _public_leads_csv(token, cacheable=True)
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 async def robots():
     # The landing page is the only thing worth indexing. Everything else is
@@ -145,6 +220,10 @@ async def robots():
         "Disallow: /api/\n"
         "Disallow: /mcp\n"
         "Disallow: /cron\n"
+        # The public CSV export. Unguessable, but a crawler that finds the URL
+        # anywhere — a pasted link, a referrer header — must not index the lead
+        # queue into a search result.
+        "Disallow: /export/\n"
         "Disallow: /login\n"
         "Disallow: /signup\n"
         "Disallow: /reset\n"

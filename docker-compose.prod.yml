@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.10.1
+    image: swan-intent-api:0.11.2
     container_name: swan-intent-api
     restart: unless-stopped
     environment:
@@ -43,6 +43,9 @@ services:
       # Apify residential proxy. Off unless set, because turning it on is what
       # makes Capterra, TrustRadius and SoftwareSuggest billable rather than
       # blocked — see collectors/proxy.py.
+      # Public CSV export for Google Sheets. Empty disables the route; a public
+      # data path must be switched on deliberately rather than inherited.
+      SHEET_EXPORT_TOKEN: ${SHEET_EXPORT_TOKEN:-}
       APIFY_RESIDENTIAL_PROXY: ${APIFY_RESIDENTIAL_PROXY:-false}
       APIFY_PROXY_PASSWORD: ${APIFY_PROXY_PASSWORD:-}
       # --- outbound mail ---

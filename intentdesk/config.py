@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     apify_token: str = ""
     apollo_api_key: str = ""
 
+    # Unguessable path segment for the public CSV export that Google Sheets'
+    # IMPORTDATA reads. **Anyone holding the URL can read the lead queue** —
+    # IMPORTDATA cannot send an Authorization header, so the secret has to be in
+    # the URL and there is no way to make this both readable by Sheets and
+    # private. Empty disables the route entirely, which is the default: a public
+    # data path must be switched on deliberately, never inherited.
+    sheet_export_token: str = ""
+
     # Apify residential proxy. Needs a PAID Apify plan — measured 2026-08-03, a
     # free account authenticates and then gets 403 on every proxy group, so this
     # cannot be switched on by accident and cannot be tested without the upgrade.

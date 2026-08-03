@@ -190,3 +190,75 @@ def test_leads_csv_bom_is_optional_and_defaults_on():
         "the download path must keep its BOM by default, or Excel mangles "
         "non-ASCII company names"
     )
+
+
+# ------------------------------------------------------- the write-up pages
+@pytest.mark.parametrize("path", ["/work", "/work/visibility-agent",
+                                  "/work/growth-strategy"])
+def test_work_pages_are_registered_before_the_catch_all(path):
+    """The StaticFiles mount at "/" swallows anything declared after it, so a
+    page that renders locally can 404 in production purely on ordering."""
+    from intentdesk.api.app import app
+
+    paths = [getattr(r, "path", None) for r in app.routes]
+    assert path in paths
+    mount_at = next(i for i, r in enumerate(app.routes)
+                    if getattr(r, "name", None) == "dashboard")
+    assert paths.index(path) < mount_at
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_work_pages_render_complete_documents(render):
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    assert html.startswith("<!doctype html>")
+    assert html.rstrip().endswith("</html>")
+    # Shared by link with a named reader, not published to be found.
+    assert 'name="robots" content="noindex,nofollow"' in html
+    # Balanced enough to not have a truncated template.
+    assert html.count("<main>") == 1 and html.count("</main>") == 1
+    assert "</style>" in html and "<style>" in html
+
+
+@pytest.mark.parametrize("render", ["visibility_agent_page", "growth_strategy_page"])
+def test_work_pages_have_no_broken_css_values(render):
+    """A malformed custom property is silently dropped by the browser, so the
+    dark theme would lose one colour with nothing in the page to show it."""
+    import re
+
+    from intentdesk.api import work
+
+    html = getattr(work, render)()
+    css = re.search(r"<style>(.*?)</style>", html, re.S).group(1)
+    for decl in re.findall(r"--[\w-]+\s*:\s*([^;}]+)", css):
+        value = decl.strip()
+        assert " " not in value or value.startswith(("clamp", "calc", "0 ")), (
+            f"suspicious custom property value: {value!r}"
+        )
+
+
+def test_both_themes_are_defined_by_token_override():
+    """prefers-color-scheme carries the OS preference and data-theme must beat it
+    in both directions, or the viewer's toggle only works one way."""
+    from intentdesk.api import work
+
+    css = work._CSS
+    assert "@media (prefers-color-scheme:dark)" in css
+    assert ":root[data-theme=dark]" in css
+    assert ":root[data-theme=light]" in css
+
+
+def test_work_pages_cross_link_each_other():
+    from intentdesk.api import work
+
+    assert "/work/growth-strategy" in work.visibility_agent_page()
+    assert "/work/visibility-agent" in work.growth_strategy_page()
+
+
+def test_robots_disallows_the_write_up():
+    import asyncio
+
+    from intentdesk.api.app import robots
+
+    assert "Disallow: /work" in asyncio.run(robots()).body.decode()

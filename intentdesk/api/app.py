@@ -18,6 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from intentdesk import db
 from intentdesk.api import landing as landing_module
 from intentdesk.api import pages
+from intentdesk.api import work
 from intentdesk.config import ROOT, settings
 from intentdesk.services import users
 from intentdesk.services import (
@@ -132,6 +133,23 @@ async def app_shell():
     return FileResponse(index)
 
 
+@app.get("/work", response_class=HTMLResponse)
+@app.get("/work/visibility-agent", response_class=HTMLResponse)
+async def work_visibility_agent():
+    """Part C of the Ticmint write-up. Public, server-rendered, `noindex`.
+
+    Two routes on one handler: `/work` is what a person types or pastes, and
+    landing them on a 404 to teach them a URL scheme is a poor greeting.
+    """
+    return HTMLResponse(work.visibility_agent_page())
+
+
+@app.get("/work/growth-strategy", response_class=HTMLResponse)
+async def work_growth_strategy():
+    """Part D of the Ticmint write-up."""
+    return HTMLResponse(work.growth_strategy_page())
+
+
 async def _public_leads_csv(token: str, cacheable: bool):
     """Shared body for the two public CSV paths. See `public_leads_csv`."""
     from intentdesk.services import export
@@ -224,6 +242,8 @@ async def robots():
         # anywhere — a pasted link, a referrer header — must not index the lead
         # queue into a search result.
         "Disallow: /export/\n"
+        # Shared by link with a named reader; not a page to be found.
+        "Disallow: /work\n"
         "Disallow: /login\n"
         "Disallow: /signup\n"
         "Disallow: /reset\n"

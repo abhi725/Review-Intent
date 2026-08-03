@@ -66,8 +66,25 @@ async def fetch_organization(domain: str) -> Optional[dict]:
         )
     if response.status_code == 429:
         raise EnrichmentUnavailable("Apollo rate limited")
+    if response.status_code == 422:
+        # Apollo answers an exhausted credit balance with 422 and the reason in
+        # the body. Reporting only the status turned "your account is out of
+        # credits until it resets" into "Apollo returned 422" on the button —
+        # which reads as a broken feature rather than a spent allowance, and sent
+        # someone looking for a bug that was not there.
+        body = response.text or ""
+        if "insufficient credits" in body.lower() or "credits" in body.lower():
+            raise EnrichmentUnavailable(
+                "Apollo enrichment credits are exhausted — the free plan's "
+                "allowance resets monthly, or upgrade the Apollo plan. Nothing "
+                "is wrong with the connection: earlier calls on this key "
+                "succeeded and spent the balance."
+            )
+        raise EnrichmentUnavailable(f"Apollo rejected the request (422): {body[:200]}")
     if response.status_code != 200:
-        raise EnrichmentUnavailable(f"Apollo returned {response.status_code}")
+        raise EnrichmentUnavailable(
+            f"Apollo returned {response.status_code}: {response.text[:200]}"
+        )
 
     return (response.json() or {}).get("organization") or None
 

@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     apify_token: str = ""
     apollo_api_key: str = ""
 
+    # Apollo `people/*`. **False because it was measured, not assumed**: every
+    # person endpoint answers 403 on the free plan, so a reviewer can never be
+    # resolved no matter how complete their name looks. Left False, the per-row
+    # button renders disabled with that reason instead of spending a click to be
+    # told. Flip it to true after upgrading the Apollo plan.
+    apollo_people_enabled: bool = False
+
     # Google Sheets push. The service account JSON key, base64-encoded — one
     # opaque value rather than separate email and key fields, because a PEM
     # private key spread across a .env file is where newline handling goes wrong,

@@ -1358,6 +1358,11 @@ function SignalActions({ signal }) {
         </span>
       ) : null}
 
+      {/* When the plan cannot do reviewer resolution at all, the control is not
+          rendered. A disabled button invites the same click every time and
+          teaches nothing; the reason, stated once, is the useful thing. Company
+          enrichment below is unaffected and still works. */}
+      {assessment?.plan_blocked ? null : (
       <button
         className="btn btn-pay"
         disabled={Boolean(refusal) || busy === "reviewer" || !assessment}
@@ -1370,6 +1375,7 @@ function SignalActions({ signal }) {
             ? "Reviewer resolved · free"
             : `Enrich reviewer · ${priced ? `${priced.measured ? "" : "~"}$${priced.estimated_usd.toFixed(2)}` : "—"}`}
       </button>
+      )}
 
       {signal.company_id ? (
         <button className="btn" disabled={busy === "company"} onClick={enrichCompany}>

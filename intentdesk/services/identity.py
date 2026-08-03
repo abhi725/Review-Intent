@@ -179,6 +179,21 @@ async def assess(signal_id: int) -> dict:
     predicted, reason = tier(shape, row["matched_company"], None)
     est = spend.estimate("enrich_reviewer", 1)
 
+    # The plan gate comes first, because it outranks everything the name can say.
+    # Apollo's person endpoints answer 403 on the free plan — measured, not
+    # assumed — so a perfectly resolvable name is still unresolvable, and a button
+    # that looks ready is a button that wastes a click to report a 403. This is
+    # deliberately not folded into `tier()`: that answers "is this name usable",
+    # which is a property of the review, and conflating it with what the account
+    # can afford would make a cached `low` verdict unreadable later.
+    plan_refusal = None
+    if not settings.apollo_people_enabled:
+        plan_refusal = (
+            "Reviewer resolution needs Apollo's people endpoints, which return 403 "
+            "on the current plan. Company enrichment still works. Set "
+            "APOLLO_PEOPLE_ENABLED=true after upgrading."
+        )
+
     return {
         "signal_id": signal_id,
         "display_name": row["author"],
@@ -190,10 +205,12 @@ async def assess(signal_id: int) -> dict:
         "reason": reason,
         # Cached is free and re-clickable; that is the point of storing `low`.
         "cached": dict(cached) if cached else None,
-        "allowed": predicted != "low" and cached is None,
+        "allowed": plan_refusal is None and predicted != "low" and cached is None,
         "estimate": est,
-        # The one case where the reason to refuse is not about money.
-        "refusal": (reason if predicted == "low" else None),
+        # The plan reason wins when both apply: "your account cannot do this at
+        # all" is more actionable than "this particular name is too thin".
+        "refusal": plan_refusal or (reason if predicted == "low" else None),
+        "plan_blocked": plan_refusal is not None,
     }
 
 
@@ -214,6 +231,20 @@ async def resolve(
 
     if pre["cached"]:
         return {**pre["cached"], "cached": True, "cost_usd": 0.0}
+
+    # Enforced here as well as in the button. The UI disabling a control is a
+    # courtesy; this is the guarantee — and unlike a thin name, a plan refusal is
+    # **not** stored as a `low` verdict, because it says nothing about the
+    # reviewer. Storing it would poison the cache: after upgrading, every row
+    # would return the old refusal for free and never retry.
+    if pre.get("plan_blocked"):
+        return {
+            "signal_id": signal_id,
+            "refused": True,
+            "reason": pre["refusal"],
+            "cached": False,
+            "cost_usd": 0.0,
+        }
 
     if pre["predicted_tier"] == "low":
         # Recorded without calling Apollo. Storing the refusal is what makes it

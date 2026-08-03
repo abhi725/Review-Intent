@@ -8,7 +8,7 @@ name: swan-intent-prod
 
 services:
   api:
-    image: swan-intent-api:0.12.0
+    image: swan-intent-api:0.12.1
     container_name: swan-intent-api
     restart: unless-stopped
     environment:
@@ -46,6 +46,9 @@ services:
       # Public CSV export for Google Sheets. Empty disables the route; a public
       # data path must be switched on deliberately rather than inherited.
       # Google Sheets push. The service account key, base64-encoded.
+      # Apollo people/* endpoints. False because every one answers 403 on the
+      # free plan; flip after upgrading so the reviewer button reappears.
+      APOLLO_PEOPLE_ENABLED: ${APOLLO_PEOPLE_ENABLED:-false}
       GOOGLE_SHEETS_SA_JSON: ${GOOGLE_SHEETS_SA_JSON:-}
       GOOGLE_SHEETS_ID: ${GOOGLE_SHEETS_ID:-}
       SHEET_EXPORT_TOKEN: ${SHEET_EXPORT_TOKEN:-}

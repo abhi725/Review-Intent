@@ -1,8 +1,14 @@
-# Intent Desk
+# Review-Intent (Intent Desk)
 
-Finds companies running a competitor's **event ticketing platform**, scores them
-by readiness to switch, drafts outreach, and serves it to a dashboard and an MCP
-server over one shared service layer.
+Competitor review management: see where your competitors are lagging behind, and
+scale your own product into that gap.
+
+Concretely — it finds companies running a competitor's **event ticketing
+platform**, scores them by readiness to switch, drafts outreach, and serves it to
+a dashboard and an MCP server over one shared service layer.
+
+Live at [intent.swandigitals.com](https://intent.swandigitals.com). The codebase
+and internal docs use the original name *Intent Desk*.
 
 What is left to do: [REMAINING.md](REMAINING.md). Original design and rationale:
 [PLAN.md](PLAN.md) — written against a helpdesk market, superseded on 2026-08-02.

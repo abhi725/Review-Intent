@@ -128,8 +128,12 @@ def test_route_exists_and_is_public(path):
     # Found by name, not by path: Starlette normalises the mount at "/" to an
     # empty path, and the landing route genuinely sits at "/", so matching on the
     # path finds the wrong thing.
-    mount_at = next(i for i, r in enumerate(app.routes)
-                    if getattr(r, "name", None) == "dashboard")
+    # Absent in a fresh checkout, where web/dist has not been built and the
+    # mount is therefore never registered — nothing to be ordered against.
+    mount_at = next((i for i, r in enumerate(app.routes)
+                     if getattr(r, "name", None) == "dashboard"), None)
+    if mount_at is None:
+        pytest.skip("dashboard bundle not built — run `npm run build` in web/")
     assert csv_at < mount_at, (
         "declared after the catch-all mount, so the dashboard bundle would answer "
         "this URL instead"
@@ -202,8 +206,15 @@ def test_work_pages_are_registered_before_the_catch_all(path):
 
     paths = [getattr(r, "path", None) for r in app.routes]
     assert path in paths
-    mount_at = next(i for i, r in enumerate(app.routes)
-                    if getattr(r, "name", None) == "dashboard")
+    # The mount is conditional on web/dist existing, so in a fresh checkout
+    # there is no catch-all to be ordered against and this has nothing to
+    # assert. Skipping beats the StopIteration it used to raise, which read as
+    # a broken test rather than an unbuilt bundle. CI builds the bundle first,
+    # so the assertion below does run there.
+    mount_at = next((i for i, r in enumerate(app.routes)
+                     if getattr(r, "name", None) == "dashboard"), None)
+    if mount_at is None:
+        pytest.skip("dashboard bundle not built — run `npm run build` in web/")
     assert paths.index(path) < mount_at
 
 

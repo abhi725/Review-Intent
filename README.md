@@ -76,6 +76,18 @@ docker exec -i swan-intent-db psql -U intentdesk -d intentdesk \
 Demo rows all use `.example` domains (reserved by RFC 2606, can never be real).
 Remove them with `python -m scripts.seed --purge-demo`.
 
+## Tests
+
+```bash
+pytest -q                 # 375 tests, ~30s
+```
+
+They need no database and no API keys — anything that would reach the network or
+Postgres is stubbed, and the checks that read `.env.prod` skip themselves when it
+is absent. `DATABASE_URL` does have to be *set* to something, because it is the
+one setting with no default and importing config fails without it; `cp
+.env.example .env` covers it, and CI passes a value that is never connected to.
+
 ## Ports
 
 | Service | Port | Notes |

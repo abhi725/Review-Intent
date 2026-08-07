@@ -38,6 +38,13 @@ jobs:
           pip install pytest
 
       - name: Run tests
+        # `database_url` is the one Settings field with no default, so importing
+        # anything that reads config fails without it. That strictness is worth
+        # keeping — a wrong default is a worse production failure than a refusal
+        # to start — so CI supplies a value rather than the code growing one.
+        # Nothing here connects: the suite touches no database.
+        env:
+          DATABASE_URL: postgresql://intentdesk:ci@127.0.0.1:5432/intentdesk
         run: pytest -q
 
   dashboard:

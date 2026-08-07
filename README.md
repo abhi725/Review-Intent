@@ -10,12 +10,32 @@ a dashboard and an MCP server over one shared service layer.
 Live at [intent.swandigitals.com](https://intent.swandigitals.com). The codebase
 and internal docs use the original name *Intent Desk*.
 
-What is left to do: [REMAINING.md](REMAINING.md). Original design and rationale:
-[PLAN.md](PLAN.md) — written against a helpdesk market, superseded on 2026-08-02.
+Current design and rationale: [ARCHITECTURE.md](ARCHITECTURE.md).
+[PLAN.md](PLAN.md), [REMAINING.md](REMAINING.md), [BUILD_ORDER.md](BUILD_ORDER.md)
+and [PLAN_SIGNAL_FEED.md](PLAN_SIGNAL_FEED.md) are a historical record of how it
+got here, not a description of what it does now — each says so at the top.
 
 Everything market-specific lives in `intentdesk/market.py`: competitors,
 complaint taxonomy, vendor markers, job and news queries, prompt wording. A
 future pivot is an edit to that one file.
+
+## Stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Backend | Python 3.12, FastAPI 0.115, uvicorn | — |
+| Database | Postgres 16, `asyncpg`, no ORM | This VM is short on RAM; migrations are plain SQL applied in order at boot |
+| Frontend | React 18 + Vite 6, built to static | Served by the API itself at `/app`; there is no separate web server |
+| Auth | Google OAuth + email/password | Passwords use stdlib `hashlib.scrypt` at OWASP parameters — no bcrypt or passlib dependency |
+| Second interface | MCP server (`mcp<2.0`), 27 tools | Same service layer as the REST API; bearer-authed as ASGI middleware |
+| LLM | OpenAI `gpt-4o`, Gemini `2.5-flash` fallback | Classification and outreach drafting |
+| External APIs | Apollo, Apify, Google Sheets, Resend/Mautic | Sheets is signed with `authlib.jose` — PyJWT is absent from the container |
+| Infrastructure | Docker Compose, Coolify + Traefik, Cloudflare | |
+| Scheduling | host cron + n8n | Free work on a schedule, paid work on a click |
+| Tests | pytest — 375, no database or secrets required | |
+
+`mcp` is pinned below 2.0 deliberately: 2.x pulls starlette 1.x, which breaks the
+`starlette<0.42` pin that FastAPI 0.115 requires.
 
 ## Layout
 

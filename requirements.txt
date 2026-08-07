@@ -10,8 +10,11 @@ authlib==1.4.0
 # Pinned below 2.0 on purpose: mcp 2.x pulls starlette 1.x, which breaks the
 # starlette<0.42 pin FastAPI 0.115 requires.
 mcp==1.12.4
-openai>=1.60
-anthropic>=0.69
+# Pinned exactly, like everything else here. These were the only two floating
+# ranges in the file, so a breaking major release could land in a prod image
+# build with no change on our side.
+openai==2.52.0
+anthropic==0.120.2
 # Avatar uploads arrive as multipart; FastAPI refuses to parse them without it.
 python-multipart==0.0.20
 # Avatars are re-encoded rather than stored as uploaded — strips EXIF, defeats

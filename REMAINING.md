@@ -1,5 +1,10 @@
 # Plan to Finish Intent Desk
 
+> **Historical record, not current status.** This was written on 2026-08-02 and
+> much of it has since shipped — see `ARCHITECTURE.md` for the current design and
+> the git log for what actually landed. Kept because the reasoning behind each
+> item is still the best explanation of *why* the code looks the way it does.
+
 Status as of 2026-08-02, after the event-ticketing build.
 Live at https://intent.swandigitals.com. Background: [PLAN.md](PLAN.md).
 

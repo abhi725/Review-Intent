@@ -1,5 +1,10 @@
 # Plan: overcoming the empty-database blocker
 
+> **Historical record, not current status.** The blocker described here was
+> closed on 2026-08-03. This is kept as the evidence behind the design — every
+> measurement in it was taken against a live API, so it is the record of what
+> was actually tried and what it cost. `ARCHITECTURE.md` describes the result.
+
 Written 2026-08-03. Everything below was **tested against the live APIs**, not
 assumed. Costs incurred: **$0.00** — no Apify credits, no paid keys.
 

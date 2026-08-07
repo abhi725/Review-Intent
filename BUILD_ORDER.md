@@ -1,5 +1,9 @@
 # Build order, sorted by file
 
+> **Historical record, not current status.** This was the working checklist for
+> the 2026-08-03 build and its items are done. `ARCHITECTURE.md` is the current
+> design.
+
 Companion to `ARCHITECTURE.md`. Same 23 items, regrouped so each file is opened
 once and finished, instead of being revisited in every phase.
 

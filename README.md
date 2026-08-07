@@ -1,5 +1,7 @@
 # Review-Intent (Intent Desk)
 
+[![CI](https://github.com/abhi725/Review-Intent/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi725/Review-Intent/actions/workflows/ci.yml)
+
 Competitor review management: see where your competitors are lagging behind, and
 scale your own product into that gap.
 

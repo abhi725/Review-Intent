@@ -86,7 +86,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "REDACTED_SPREADSHEET_ID"
+          "value": "REPLACE_WITH_SPREADSHEET_ID"
         },
         "sheetName": {
           "__rl": true,

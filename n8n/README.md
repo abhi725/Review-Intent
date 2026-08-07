@@ -27,8 +27,9 @@ Bearer <the MCP_BEARER_TOKEN value from /root/intent-desk/.env.prod>
 The token is deliberately not committed here. Keep the word `Bearer` and the
 space before the token.
 
-**3. The target sheet is already set** to document
-`REDACTED_SPREADSHEET_ID`, first tab.
+**3. Set the target sheet.** Replace `REPLACE_WITH_SPREADSHEET_ID` in the
+`documentId` field with your own spreadsheet ID — the long string in the sheet's
+URL between `/d/` and `/edit`. The workflow writes to the first tab.
 
 The tab is addressed by **gid `0`** rather than by title. `sheetName` has no
 "by name" mode — only *From List*, *By URL* and *By ID*, where the ID is the gid —

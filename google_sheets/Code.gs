@@ -43,7 +43,7 @@ function intentDeskConfig_() {
     // By ID rather than getActiveSpreadsheet(), which returns null in a
     // standalone script project -- one created at script.google.com instead of
     // from Extensions -> Apps Script inside the sheet.
-    spreadsheetId: 'REDACTED_SPREADSHEET_ID',
+    spreadsheetId: 'PASTE_SPREADSHEET_ID_HERE',
 
     sheetIndex: 0,
 
